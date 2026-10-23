@@ -17,19 +17,17 @@ El objetivo es que la política funcione en **dos** proyectos antes de publicarl
 
 **Salida:** SEUCCA tiene la política funcionando y `shucca` no se toca.
 
-## Fase 1 · Extraer al repo privado y espejo público
+## Fase 1 · Extraer al repo público
 
-- [ ] `git init` en `portucca-internal` + estructura `public/` (código) y `docs/` (interno)
-- [ ] Configurar `.github/workflows/sync-public.yml` (espejo `public/` → `gomezv/portucca`)
-- [ ] Implementar la CLI en `public/` según `docs/SPEC.md` (comandos `ensure`,
-      `reallocate`, `prune`, `doctor`, `setup`)
+- [ ] Estructura `bin/`, `lib/`, `test/` en `portucca` (repo público)
+- [ ] Implementar la CLI según `docs/SPEC.md` (comandos `ensure`, `reallocate`, `prune`,
+      `doctor`, `setup`)
 - [ ] Registro global con `project` etiquetado y bandas por proyecto
 - [ ] Suite `node:test` completa, incluida la concurrencia real con `flock`
-- [ ] `public/README.md` con la instalación y el ejemplo de uso
-- [ ] Primer commit en el privado + primer sync al público, declarando el origen
-      (port de `shucca` PR #22) con atribución
+- [ ] `README` con la instalación y el ejemplo de uso
+- [ ] Primer commit declarando el origen (port de `shucca` PR #22) con atribución
 
-**Salida:** la CLI funciona en local y el espejo público se actualiza desde el privado.
+**Salida:** la CLI funciona en local y reproduce el comportamiento de `shucca`.
 
 ## Fase 2 · Publicar `0.1.0` en npm
 
@@ -75,5 +73,4 @@ El objetivo es que la política funcione en **dos** proyectos antes de publicarl
 - [ ] `shucca` y `seucca` pueden migrar sin cambiar el comportamiento observable de sus
       stacks (mismos puertos, mismos mensajes de error)
 - [ ] El README explica la instalación, el uso y la política sin necesidad de leer el código
-- [ ] El espejo público se actualiza desde el privado y no contiene docs internos
 - [ ] `npm pack --dry-run` no incluye nada que no deba publicarse

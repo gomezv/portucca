@@ -6,12 +6,6 @@ El paquete `portucca` **está libre** en el registry (verificado el 2026-10-22) 
 publicación ocurre en la Fase 2 del roadmap, después de probar la política en `shucca` y
 `seucca`.
 
-El código y la documentación que se publican viven en `public/` del repo privado
-`portucca-internal`. El repo `gomezv/portucca` es un **espejo de solo lectura** que se
-regenera con `git subtree split --prefix=public` al mergear en `main` (ver
-`docs/DECISIONS.md`, D11). La publicación en npm se hace desde el espejo, no desde el repo
-privado.
-
 ## 1. Cuenta
 
 - La cuenta se crea en **npmjs.com** (gratis): nombre de usuario, email verificado.
@@ -50,19 +44,11 @@ Reglas de `files`:
 
 ## 3. Flujo
 
-1. En `portucca-internal/public/`: subir `version` en `package.json`, actualizar el
-   CHANGELOG y mergear a `main`. El workflow sincroniza el espejo.
-2. En el espejo público, verificar y publicar:
-
 ```bash
-npm ci
-npm test
-npm pack --dry-run
 npm login                 # o: npm login --registry https://registry.npmjs.org
+npm version 0.1.0         # tag git: v0.1.0
 npm publish --access public
 npm view portucca         # verificar
-git tag v0.1.0
-git push origin v0.1.0
 ```
 
 Verificación de instalación limpia (en un directorio temporal, sin nada local):
@@ -74,15 +60,11 @@ npx portucca@0.1.0 doctor
 
 ## 4. Automatización (CI)
 
-- El workflow de publicación vivirá en `public/.github/workflows/publish.yml` y se publicará
-  en el espejo. Se disparará con un tag `v*` en el repo público.
-- Token de automatización de npm → secreto `NPM_TOKEN` en el repo público.
-- Workflow:
+- Token de automatización de npm → secreto `NPM_TOKEN` en GitHub Actions.
+- Workflow que publica cuando se empuja un tag `v*`:
   1. `npm ci`
   2. `npm test`
   3. `npm publish --access public` con `NODE_AUTH_TOKEN`
-- El repo privado necesita el secret `PUBLIC_REPO_TOKEN` (PAT con escritura solo sobre el
-  repo público) para que `.github/workflows/sync-public.yml` pueda empujar el espejo.
 - El `package.json` de publicación necesita:
 
 ```json
@@ -102,8 +84,6 @@ npx portucca@0.1.0 doctor
 ## 6. Lista de verificación antes de publicar
 
 - [ ] `npm pack --dry-run` revisado archivo por archivo
-- [ ] El espejo público está sincronizado y no contiene documentación interna
-- [ ] `public/` no contiene enlaces a `docs/`
 - [ ] El paquete no incluye `.env`, registros de estado ni nada del proyecto consumidor
 - [ ] `engines.node` refleja el mínimo real (Node 20+)
 - [ ] El binario se ejecuta con `npx` sin instalar nada

@@ -159,28 +159,28 @@ Este repo arranca con la especificación y las decisiones. El código se escribe
 adaptación a SEUCCA esté funcionando, para que el repo nazca con la política ya probada en
 dos proyectos (ver D4).
 
-**Actualizado por D11:** el repo de trabajo pasa a ser `portucca-internal`; el repo público
-es un espejo de solo lectura.
+**Actualizado por D11:** el código se desarrolla en el repo público `portucca`; este repo
+privado conserva solo la documentación interna.
 
 ---
 
-## D11 · Repo privado de trabajo + espejo público
+## D11 · Código público, documentación interna privada
 
 **Fecha:** 2026-10-22
 
-El repo público no debe contener documentación de desarrollo, pero el trabajo diario
-(ramas, commits y PRs) ocurre en un repo privado.
+El repo público no debe contener documentación de diseño, decisiones, roadmap, competencia
+ni notas de adopción. El código sí es público.
 
-- **Elegido:** `portucca-internal` (privado) es el repo de trabajo. Contiene `public/` (lo
-  único que se publica) y `docs/` (SPEC, DESIGN, DECISIONS, ROADMAP, COMPETITORS,
-  PUBLISHING, ADOPTION). Al mergear en `main`, un workflow hace
-  `git subtree split --prefix=public` y empuja a `gomezv/portucca`.
-- **Motivo:** el público queda limpio y de solo lectura, sin docs internos ni historia de
-  desarrollo; el trabajo diario y los PRs ocurren en un solo repo.
-- **Alternativa descartada:** código en el repo público y docs en un repo privado separado —
-  obliga a partir cada cambio en dos PRs y no era el flujo pedido.
-- **Alternativa descartada:** copiar `public/` a mano en cada release — se desincroniza y no
-  deja historial.
-- **Consecuencia:** el público es un espejo; los PRs externos se importan al privado. Los
-  commits que tocan `public/` deben tener mensajes públicos. El workflow necesita un PAT
-  (`PUBLIC_REPO_TOKEN`) con escritura solo sobre el repo público.
+- **Elegido:** el código, los tests y los PRs viven en `portucca` (público). La
+  documentación interna (SPEC, DESIGN, DECISIONS, ROADMAP, COMPETITORS, PUBLISHING,
+  ADOPTION) vive en `portucca-internal` (privado). El público puede tener documentación de
+  usuario (README, CLI, configuración).
+- **Motivo:** el público queda limpio, los PRs externos funcionan y no hay espejo ni
+  sincronización que mantener. El taller de desarrollo no se expone.
+- **Etapa posterior:** cuando haya contribuidores, se promueve al público una arquitectura
+  corta y ADRs de decisiones cerradas; el log completo y las alternativas siguen privados.
+- **Alternativa descartada:** repo privado + espejo público con `git subtree split` —
+  funciona, pero añade PAT, force push y hace que los PRs externos no sean directos; se
+  descartó porque el requisito real era ocultar solo los documentos.
+- **Alternativa descartada:** mantener los docs internos en el repo público y excluirlos de
+  npm — no resuelve el problema: el repo de GitHub seguiría exponiéndolos.

@@ -75,4 +75,5 @@ El objetivo es que la política funcione en **dos** proyectos antes de publicarl
 - [ ] `shucca` y `seucca` pueden migrar sin cambiar el comportamiento observable de sus
       stacks (mismos puertos, mismos mensajes de error)
 - [ ] El README explica la instalación, el uso y la política sin necesidad de leer el código
+- [ ] El espejo público se actualiza desde el privado y no contiene docs internos
 - [ ] `npm pack --dry-run` no incluye nada que no deba publicarse

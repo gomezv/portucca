@@ -55,6 +55,46 @@ func parseKey(raw string) string {
 	return key
 }
 
+func commentIndex(s string) int {
+	for i := 1; i < len(s); i++ {
+		if s[i] == '#' && (s[i-1] == ' ' || s[i-1] == '\t') {
+			return i
+		}
+	}
+	return -1
+}
+
+func splitValue(raw string) (value, suffix string) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", ""
+	}
+	if s[0] == '"' || s[0] == '\'' {
+		quote := s[0]
+		if end := strings.IndexByte(s[1:], quote); end >= 0 {
+			end++
+			value = s[1:end]
+			rest := s[end+1:]
+			if idx := commentIndex(rest); idx >= 0 {
+				start := idx
+				for start > 0 && (rest[start-1] == ' ' || rest[start-1] == '\t') {
+					start--
+				}
+				return value, rest[start:]
+			}
+			return value, ""
+		}
+	}
+	if idx := commentIndex(s); idx >= 0 {
+		start := idx
+		for start > 0 && (s[start-1] == ' ' || s[start-1] == '\t') {
+			start--
+		}
+		return strings.TrimRight(s[:start], " \t"), s[start:]
+	}
+	return s, ""
+}
+
 func (d *Document) Get(key string) (string, bool) {
 	for _, l := range d.lines {
 		if l.key != key {
@@ -66,11 +106,8 @@ func (d *Document) Get(key string) (string, bool) {
 		if eq < 0 {
 			continue
 		}
-		v := strings.TrimSpace(s[eq+1:])
-		if len(v) >= 2 && ((v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'')) {
-			v = v[1 : len(v)-1]
-		}
-		return v, true
+		value, _ := splitValue(s[eq+1:])
+		return value, true
 	}
 	return "", false
 }
@@ -85,8 +122,13 @@ func (d *Document) Set(key, value string) bool {
 		trimmed := strings.TrimSpace(l.raw)
 		if strings.HasPrefix(trimmed, "export ") {
 			prefix = "export "
+			trimmed = strings.TrimPrefix(trimmed, "export ")
 		}
-		next := prefix + key + "=" + value
+		suffix := ""
+		if eq := strings.IndexByte(trimmed, '='); eq >= 0 {
+			_, suffix = splitValue(trimmed[eq+1:])
+		}
+		next := prefix + key + "=" + value + suffix
 		if d.lines[i].raw != next {
 			d.lines[i].raw = next
 			changed = true
@@ -156,10 +198,17 @@ func WriteValues(root string, values map[string]map[string]string) (bool, error)
 	sort.Strings(files)
 	for _, file := range files {
 		path := filepath.Join(root, file)
+		info, err := os.Lstat(path)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return false, err
+		}
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return false, fmt.Errorf("env target %s is a symlink; portucca will not replace it", path)
+		}
 		mode := os.FileMode(0o600)
 		data, err := os.ReadFile(path)
 		if err == nil {
-			if info, statErr := os.Stat(path); statErr == nil {
+			if info != nil {
 				mode = info.Mode().Perm()
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {

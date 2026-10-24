@@ -73,11 +73,8 @@ func Plan(req Request) (Result, error) {
 		if !ok {
 			continue
 		}
-		if !claim.Port.Valid() {
-			continue
-		}
 		svc := req.Config.Services[name]
-		if claim.Port < svc.StartPort {
+		if !claim.Port.Valid() || claim.Port < svc.StartPort {
 			return Result{}, &OutOfBandError{Service: name, Port: claim.Port}
 		}
 		if used[claim.Port] {
@@ -101,7 +98,7 @@ func Plan(req Request) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
-		if !ok || port < svc.StartPort {
+		if !ok || !port.Valid() || port < svc.StartPort {
 			continue
 		}
 		if used[port] {

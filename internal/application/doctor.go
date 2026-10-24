@@ -36,9 +36,21 @@ type DoctorRegistry struct {
 	Claims      int    `json:"claims"`
 }
 
+type DoctorService struct {
+	MainPort  domain.Port `json:"mainPort"`
+	StartPort domain.Port `json:"startPort"`
+}
+
+type DoctorConfig struct {
+	Valid    bool                                 `json:"valid"`
+	Version  int                                  `json:"version,omitempty"`
+	Services map[domain.ServiceName]DoctorService `json:"services,omitempty"`
+}
+
 type DoctorResult struct {
 	OK       bool           `json:"ok"`
 	Project  domain.Project `json:"project,omitempty"`
+	Config   DoctorConfig   `json:"config"`
 	Registry DoctorRegistry `json:"registry"`
 	Claims   []DoctorClaim  `json:"claims"`
 	Errors   []Issue        `json:"errors"`
@@ -72,7 +84,7 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 	var detectErr error
 	c, detectErr = a.Locator.Detect(worktree)
 	if detectErr != nil {
-		result.Warnings = append(result.Warnings, Issue{Code: "not_a_repo", Message: detectErr.Error()})
+		result.Warnings = append(result.Warnings, projectIssue(detectErr))
 	} else {
 		loaded, _, loadErr := a.loadConfig(c.Root)
 		if loadErr != nil {
@@ -81,6 +93,7 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 		} else {
 			cfg, haveConfig = loaded, true
 			result.Project = cfg.Project
+			result.Config = doctorConfig(cfg)
 		}
 	}
 	byPort := map[domain.Port]string{}
@@ -91,13 +104,13 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 			dc.Issues = append(dc.Issues, Issue{Code: "stale_claim", Message: "el worktree no existe"})
 		} else {
 			dc.Live = true
-			claimCfg, _, cfgErr := a.loadConfig(claim.Path)
+			claimCfg, _, cfgErr := a.Config.LoadRoot(claim.Path)
 			if cfgErr != nil {
 				result.Warnings = append(result.Warnings, configIssue(cfgErr))
 			}
 			for name, sc := range claim.Services {
 				if other, ok := byPort[sc.Port]; ok && other != claim.Path {
-					result.Errors = append(result.Errors, Issue{Code: "duplicate_claim", Message: "puerto reclamado por dos worktrees"})
+					result.Errors = append(result.Errors, Issue{Code: "duplicate_claim", Message: fmt.Sprintf("puerto %d reclamado por %s y %s", sc.Port, other, claim.Path)})
 					result.OK = false
 				}
 				byPort[sc.Port] = claim.Path
@@ -134,8 +147,8 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 			}
 		}
 	}
-	if haveConfig && a.Env != nil {
-		if own := findClaim(reg, c.Root); own != nil {
+	if haveConfig {
+		if own := findClaim(reg, c.Root); own != nil && a.Env != nil {
 			desired := desiredValues(cfg, own.Services)
 			for _, target := range cfg.Env {
 				expected := desired[target.File][target.Key]
@@ -144,29 +157,29 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 					result.Warnings = append(result.Warnings, Issue{Code: "env_out_of_sync", Message: filepath.Join(target.File, target.Key)})
 				}
 			}
-			for _, link := range cfg.Bootstrap.Symlinks {
-				path := filepath.Join(c.Root, link.Path)
-				info, err := os.Lstat(path)
-				if errors.Is(err, fs.ErrNotExist) {
-					result.Warnings = append(result.Warnings, Issue{Code: "symlink_missing", Message: link.Path})
-					continue
-				}
-				if err != nil {
-					result.Warnings = append(result.Warnings, Issue{Code: "symlink_out_of_sync", Message: link.Path})
-					continue
-				}
-				if info.Mode()&os.ModeSymlink == 0 {
-					result.Warnings = append(result.Warnings, Issue{Code: "symlink_out_of_sync", Message: link.Path})
-					continue
-				}
-				if target, err := os.Readlink(path); err != nil || target != link.Target {
-					result.Warnings = append(result.Warnings, Issue{Code: "symlink_out_of_sync", Message: link.Path})
-				}
+		}
+		for _, link := range cfg.Bootstrap.Symlinks {
+			path := filepath.Join(c.Root, link.Path)
+			info, err := os.Lstat(path)
+			if errors.Is(err, fs.ErrNotExist) {
+				result.Warnings = append(result.Warnings, Issue{Code: "symlink_missing", Message: link.Path})
+				continue
 			}
-			for _, rel := range cfg.Bootstrap.CopyFromMain {
-				if _, err := os.Lstat(filepath.Join(c.Root, rel)); errors.Is(err, fs.ErrNotExist) {
-					result.Warnings = append(result.Warnings, Issue{Code: "bootstrap_pending", Message: rel})
-				}
+			if err != nil {
+				result.Warnings = append(result.Warnings, Issue{Code: "symlink_out_of_sync", Message: link.Path})
+				continue
+			}
+			if info.Mode()&os.ModeSymlink == 0 {
+				result.Warnings = append(result.Warnings, Issue{Code: "symlink_out_of_sync", Message: link.Path})
+				continue
+			}
+			if target, err := os.Readlink(path); err != nil || target != link.Target {
+				result.Warnings = append(result.Warnings, Issue{Code: "symlink_out_of_sync", Message: link.Path})
+			}
+		}
+		for _, rel := range cfg.Bootstrap.CopyFromMain {
+			if _, err := os.Lstat(filepath.Join(c.Root, rel)); errors.Is(err, fs.ErrNotExist) {
+				result.Warnings = append(result.Warnings, Issue{Code: "bootstrap_pending", Message: rel})
 			}
 		}
 	}
@@ -177,6 +190,22 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 		return result.Claims[i].Path < result.Claims[j].Path
 	})
 	return result, nil
+}
+
+func doctorConfig(cfg domain.Config) DoctorConfig {
+	services := make(map[domain.ServiceName]DoctorService, len(cfg.Services))
+	for name, svc := range cfg.Services {
+		services[name] = DoctorService{MainPort: svc.MainPort, StartPort: svc.StartPort}
+	}
+	return DoctorConfig{Valid: true, Version: cfg.Version, Services: services}
+}
+
+func projectIssue(err error) Issue {
+	mapped := mapProjectErr(err)
+	if ae, ok := apperr.As(mapped); ok {
+		return Issue{Code: ae.Code, Message: ae.Message, Hint: ae.Hint}
+	}
+	return Issue{Code: "not_a_repo", Message: err.Error()}
 }
 
 func configIssue(err error) Issue {

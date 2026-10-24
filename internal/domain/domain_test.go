@@ -38,6 +38,9 @@ func TestConfigValidate(t *testing.T) {
 		{"bad service name", func(c *Config) {
 			c.Services = map[ServiceName]Service{"Web": {MainPort: 5173, StartPort: 5174}}
 		}, "service"},
+		{"service name with dash and digit", func(c *Config) {
+			c.Services["web-2"] = Service{MainPort: 6000, StartPort: 6001}
+		}, ""},
 		{"start below main", func(c *Config) {
 			c.Services["web"] = Service{MainPort: 5174, StartPort: 5173}
 		}, "startPort"},
@@ -50,6 +53,9 @@ func TestConfigValidate(t *testing.T) {
 		{"env duplicate key", func(c *Config) {
 			c.Env = append(c.Env, EnvTarget{Service: "web", File: "apps/web/.env.local", Key: "WEB_PORT"})
 		}, "duplicate env target"},
+		{"env invalid key", func(c *Config) {
+			c.Env = append(c.Env, EnvTarget{Service: "web", File: "apps/web/.env.local", Key: "API-PORT"})
+		}, "invalid key"},
 		{"env escapes repo", func(c *Config) {
 			c.Env = append(c.Env, EnvTarget{Service: "web", File: "../outside", Key: "X"})
 		}, "escapes"},

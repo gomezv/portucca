@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gomezv/portucca/internal/application"
+	"github.com/gomezv/portucca/internal/domain"
 )
 
 func TestRunVersion(t *testing.T) {
@@ -136,6 +139,164 @@ func TestListJSONSuccessEnvelope(t *testing.T) {
 	}
 	if errb.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty with --json", errb.String())
+	}
+}
+
+func TestJSONTokenAsFlagValueDoesNotEnableJSON(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"ensure", "--worktree", "--json"}, &out, &errb)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want human output only on stderr", out.String())
+	}
+	if !strings.Contains(errb.String(), "error:") {
+		t.Fatalf("stderr = %q, want a human error", errb.String())
+	}
+}
+
+func TestJSONEqualsTrueEmitsJSON(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"version", "--json=true"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var env struct {
+		SchemaVersion int    `json:"schemaVersion"`
+		Command       string `json:"command"`
+		OK            bool   `json:"ok"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("out = %q: %v", out.String(), err)
+	}
+	if env.SchemaVersion != 1 || env.Command != "version" || !env.OK {
+		t.Fatalf("envelope = %+v, want a version success envelope", env)
+	}
+	if errb.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty with --json", errb.String())
+	}
+}
+
+func TestVersionJSONEnvelope(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"version", "--json"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var env struct {
+		SchemaVersion int    `json:"schemaVersion"`
+		Command       string `json:"command"`
+		OK            bool   `json:"ok"`
+		Data          struct {
+			Version string `json:"version"`
+			Commit  string `json:"commit"`
+			OS      string `json:"os"`
+			Arch    string `json:"arch"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("out = %q: %v", out.String(), err)
+	}
+	if env.SchemaVersion != 1 || env.Command != "version" || !env.OK {
+		t.Fatalf("envelope = %+v, want a version success envelope", env)
+	}
+	if env.Data.Version == "" || env.Data.Commit == "" || env.Data.OS == "" || env.Data.Arch == "" {
+		t.Fatalf("data = %+v, want version, commit, os, and arch", env.Data)
+	}
+	if errb.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty with --json", errb.String())
+	}
+}
+
+func TestVersionShortcutJSON(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"--version", "--json"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !json.Valid(out.Bytes()) || !strings.Contains(out.String(), `"schemaVersion": 1`) {
+		t.Fatalf("out = %q, want a version JSON envelope", out.String())
+	}
+}
+
+func TestVersionUsageErrors(t *testing.T) {
+	cases := [][]string{
+		{"version", "--bogus"},
+		{"version", "extra"},
+		{"--version", "--bogus"},
+	}
+	for _, args := range cases {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var out, errb bytes.Buffer
+			code := Run(args, &out, &errb)
+			if code != 2 {
+				t.Fatalf("exit = %d, want 2", code)
+			}
+			if errb.Len() == 0 {
+				t.Fatal("stderr is empty, want a usage error")
+			}
+		})
+	}
+}
+
+func TestEnsureRejectsUnknownFlag(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"ensure", "--bogus"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errb.String(), "bogus") {
+		t.Fatalf("stderr = %q, want the unknown flag named", errb.String())
+	}
+}
+
+func TestInitRequiresProjectAndService(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"init"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errb.String(), "--project") {
+		t.Fatalf("stderr = %q, want the missing flag message", errb.String())
+	}
+}
+
+func TestHelpExitsZero(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"--help"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "usage:") {
+		t.Fatalf("out = %q, want usage", out.String())
+	}
+}
+
+func TestUnknownCommandWithNoHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+	var out, errb bytes.Buffer
+	code := Run([]string{"nope"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errb.String(), "unknown command") {
+		t.Fatalf("stderr = %q, want unknown command", errb.String())
+	}
+}
+
+func TestPrintEnsureSortsServices(t *testing.T) {
+	v := application.EnsureResult{Services: map[domain.ServiceName]domain.ServiceClaim{
+		"web": {Port: 18080},
+		"api": {Port: 18090},
+	}}
+	for i := 0; i < 20; i++ {
+		var out bytes.Buffer
+		printEnsure(&out, v)
+		if strings.Index(out.String(), "api:") > strings.Index(out.String(), "web:") {
+			t.Fatalf("output = %q, want api before web", out.String())
+		}
 	}
 }
 

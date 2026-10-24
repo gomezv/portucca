@@ -30,30 +30,30 @@ type globalFlags struct {
 
 var errHelp = errors.New("help")
 
+var knownCommands = map[string]bool{
+	"init":       true,
+	"ensure":     true,
+	"setup":      true,
+	"reallocate": true,
+	"prune":      true,
+	"doctor":     true,
+	"env":        true,
+	"list":       true,
+	"version":    true,
+}
+
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		fmt.Fprintln(stdout, "portucca — sticky ports per worktree")
-		fmt.Fprintln(stdout, "usage: portucca <init|ensure|setup|reallocate|prune|doctor|env|list|version> [flags]")
-		return 0
-	}
-	if args[0] == "version" || args[0] == "--version" {
-		data := map[string]any{
-			"version": buildinfo.Version,
-			"commit":  buildinfo.Commit,
-			"os":      runtime.GOOS,
-			"arch":    runtime.GOARCH,
-		}
-		if hasJSON(args[1:]) {
-			writeJSON(stdout, "version", data, nil)
-		} else {
-			fmt.Fprintf(stdout, "portucca %s (%s)\n", buildinfo.Version, buildinfo.Commit)
-		}
+		printUsage(stdout)
 		return 0
 	}
 	cmd := args[0]
-	data, err := execute(cmd, args[1:])
+	if cmd == "--version" {
+		cmd = "version"
+	}
+	data, jsonMode, err := execute(cmd, args[1:])
 	if errors.Is(err, errHelp) {
-		fmt.Fprintln(stdout, "usage: portucca <init|ensure|setup|reallocate|prune|doctor|env|list|version> [flags]")
+		printUsage(stdout)
 		return 0
 	}
 	if err != nil {
@@ -61,7 +61,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if ae, ok := apperr.As(err); ok && ae.Code == "usage" {
 			code = 2
 		}
-		if hasJSON(args[1:]) {
+		if jsonMode {
 			writeJSON(stdout, cmd, nil, err)
 		} else {
 			writeHuman(stderr, cmd, nil, err)
@@ -69,14 +69,14 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	if d, ok := data.(application.DoctorResult); ok && !d.OK {
-		if hasJSON(args[1:]) {
+		if jsonMode {
 			writeJSON(stdout, cmd, data, nil)
 		} else {
 			writeHuman(stdout, cmd, data, nil)
 		}
 		return 1
 	}
-	if hasJSON(args[1:]) {
+	if jsonMode {
 		writeJSON(stdout, cmd, data, nil)
 	} else {
 		writeHuman(stdout, cmd, data, nil)
@@ -84,16 +84,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func hasJSON(args []string) bool {
-	for _, a := range args {
-		if a == "--json" {
-			return true
-		}
-	}
-	return false
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "portucca — sticky ports per worktree")
+	fmt.Fprintln(w, "usage: portucca <init|ensure|setup|reallocate|prune|doctor|env|list|version> [flags]")
 }
 
-func execute(cmd string, args []string) (any, error) {
+func execute(cmd string, args []string) (any, bool, error) {
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var g globalFlags
@@ -117,26 +113,40 @@ func execute(cmd string, args []string) (any, error) {
 		fs.StringVar(&initPreset, "preset", "", "")
 		fs.BoolVar(&initForce, "force", false, "")
 		fs.Var(&services, "service", "")
+	case "version":
+		var versionFlag bool
+		fs.BoolVar(&versionFlag, "version", false, "")
 	default:
 		// ensure, setup, reallocate, prune, doctor, env use only global flags.
 	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return nil, errHelp
+			return nil, g.json, errHelp
 		}
-		return nil, apperr.New("usage", err.Error(), "revisa las flags")
+		return nil, g.json, apperr.New("usage", err.Error(), "revisa las flags")
+	}
+	if !knownCommands[cmd] {
+		return nil, g.json, apperr.New("usage", "unknown command: "+cmd, "")
 	}
 	if fs.NArg() > 0 {
-		return nil, apperr.New("usage", "unexpected argument: "+fs.Arg(0), "")
+		return nil, g.json, apperr.New("usage", "unexpected argument: "+fs.Arg(0), "")
 	}
 	if cmd == "list" && all && projectFlag != "" {
-		return nil, apperr.New("usage", "--all and --project are mutually exclusive", "")
+		return nil, g.json, apperr.New("usage", "--all and --project are mutually exclusive", "")
+	}
+	if cmd == "version" {
+		return versionInfo{
+			Version: buildinfo.Version,
+			Commit:  buildinfo.Commit,
+			OS:      runtime.GOOS,
+			Arch:    runtime.GOARCH,
+		}, g.json, nil
 	}
 	regPath := g.registry
 	if regPath == "" {
 		p, err := registry.DefaultPath()
 		if err != nil {
-			return nil, apperr.New("internal", err.Error(), "define HOME o usa --registry")
+			return nil, g.json, apperr.New("internal", err.Error(), "define HOME o usa --registry")
 		}
 		regPath = p
 	}
@@ -153,28 +163,35 @@ func execute(cmd string, args []string) (any, error) {
 	ctx := context.Background()
 	switch cmd {
 	case "ensure":
-		return app.Ensure(ctx, g.worktree)
+		data, err := app.Ensure(ctx, g.worktree)
+		return data, g.json, err
 	case "setup":
-		return app.Setup(ctx, g.worktree)
+		data, err := app.Setup(ctx, g.worktree)
+		return data, g.json, err
 	case "reallocate":
-		return app.Reallocate(ctx, g.worktree)
+		data, err := app.Reallocate(ctx, g.worktree)
+		return data, g.json, err
 	case "prune":
-		return app.Prune(ctx)
+		data, err := app.Prune(ctx)
+		return data, g.json, err
 	case "doctor":
-		return app.Doctor(ctx, g.worktree)
+		data, err := app.Doctor(ctx, g.worktree)
+		return data, g.json, err
 	case "env":
-		return app.Env(ctx, g.worktree)
+		data, err := app.Env(ctx, g.worktree)
+		return data, g.json, err
 	case "list":
-		return app.List(ctx, g.worktree, projectFlag, all)
+		data, err := app.List(ctx, g.worktree, projectFlag, all)
+		return data, g.json, err
 	case "init":
 		if initProject == "" || len(services) == 0 {
-			return nil, apperr.New("usage", "--project and at least one --service are required", "")
+			return nil, g.json, apperr.New("usage", "--project and at least one --service are required", "")
 		}
-		return app.Init(ctx, application.InitRequest{
+		data, err := app.Init(ctx, application.InitRequest{
 			Project: initProject, Services: services, Preset: initPreset, Force: initForce,
 			Worktree: g.worktree, ConfigPath: g.config,
 		})
-	default:
-		return nil, apperr.New("usage", "unknown command: "+cmd, "")
+		return data, g.json, err
 	}
+	return nil, g.json, apperr.New("usage", "unknown command: "+cmd, "")
 }

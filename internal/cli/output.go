@@ -4,10 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/gomezv/portucca/internal/apperr"
 	"github.com/gomezv/portucca/internal/application"
+	"github.com/gomezv/portucca/internal/domain"
 )
+
+type versionInfo struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	OS      string `json:"os"`
+	Arch    string `json:"arch"`
+}
 
 type envelope struct {
 	SchemaVersion int           `json:"schemaVersion"`
@@ -45,6 +54,8 @@ func writeHuman(w io.Writer, cmd string, data any, err error) {
 		return
 	}
 	switch v := data.(type) {
+	case versionInfo:
+		fmt.Fprintf(w, "portucca %s (%s)\n", v.Version, v.Commit)
 	case application.EnsureResult:
 		printEnsure(w, v)
 	case application.SetupResult:
@@ -81,7 +92,13 @@ func writeHuman(w io.Writer, cmd string, data any, err error) {
 
 func printEnsure(w io.Writer, v application.EnsureResult) {
 	fmt.Fprintf(w, "project: %s\nworktree: %s (main=%v) changed=%v\n", v.Project, v.WorktreePath, v.IsMain, v.Changed)
-	for name, sc := range v.Services {
+	names := make([]domain.ServiceName, 0, len(v.Services))
+	for name := range v.Services {
+		names = append(names, name)
+	}
+	sort.Slice(names, func(i, j int) bool { return names[i] < names[j] })
+	for _, name := range names {
+		sc := v.Services[name]
 		fmt.Fprintf(w, "%s: %d adopted=%v\n", name, sc.Port, sc.Adopted)
 	}
 	for _, e := range v.Env {

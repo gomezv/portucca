@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -247,6 +248,82 @@ func TestDoctorReportsBootstrapIssuesWithoutClaim(t *testing.T) {
 	if !codes["symlink_missing"] || !codes["bootstrap_pending"] {
 		t.Fatalf("warnings = %+v, want symlink_missing and bootstrap_pending", got.Warnings)
 	}
+}
+
+func TestDoctorReportsMissingEnvWithoutClaim(t *testing.T) {
+	root := t.TempDir()
+	cfg := domain.Config{
+		Version: 1,
+		Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 3000, StartPort: 3001},
+		},
+		Env: []domain.EnvTarget{{Service: "web", File: ".env.local", Key: "PORT"}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 1}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root}}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasWarning(got.Warnings, "env_missing") {
+		t.Fatalf("warnings = %+v, want env_missing", got.Warnings)
+	}
+}
+
+func TestDoctorReportsEnvSymlinkWithoutClaim(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Symlink(".env.shared", filepath.Join(root, ".env.local")); err != nil {
+		t.Fatal(err)
+	}
+	cfg := domain.Config{
+		Version: 1,
+		Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 3000, StartPort: 3001},
+		},
+		Env: []domain.EnvTarget{{Service: "web", File: ".env.local", Key: "PORT"}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 1}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root}}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasWarning(got.Warnings, "env_symlink") {
+		t.Fatalf("warnings = %+v, want env_symlink", got.Warnings)
+	}
+}
+
+func TestDoctorReportsBootstrapSourceMissing(t *testing.T) {
+	root := t.TempDir()
+	mainRoot := t.TempDir()
+	cfg := domain.Config{
+		Version: 1,
+		Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 3000, StartPort: 3001},
+		},
+		Bootstrap: domain.Bootstrap{CopyFromMain: []string{".env"}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 1}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: mainRoot}}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasWarning(got.Warnings, "bootstrap_source_missing") {
+		t.Fatalf("warnings = %+v, want bootstrap_source_missing", got.Warnings)
+	}
+}
+
+func hasWarning(warnings []Issue, code string) bool {
+	for _, warning := range warnings {
+		if warning.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func TestDoctorDuplicateClaimMessageIncludesPortAndPaths(t *testing.T) {

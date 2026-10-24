@@ -2,6 +2,7 @@ package platform
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,6 +22,28 @@ func TestExclusiveLockBlocks(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), path) {
 		t.Fatalf("err = %q, want message containing lock path %q", err, path)
+	}
+}
+
+func TestLockForcesMode600(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json.lock")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := Lock(path, time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %04o, want 0600", info.Mode().Perm())
 	}
 }
 

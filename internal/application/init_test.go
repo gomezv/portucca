@@ -70,6 +70,55 @@ func TestInitRefusesOverwriteWithoutForce(t *testing.T) {
 	}
 }
 
+func TestInitConfigOutsideRootIsUsage(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "portucca.json")
+	app := &App{
+		Locator:  fakeLocator{ctx: project.Context{Root: dir}},
+		Config:   config.Loader{},
+		Registry: &fakeRegistry{reg: domain.Registry{Version: 1}},
+		Locker:   fakeLocker{},
+	}
+	_, err := app.Init(context.Background(), InitRequest{
+		Project:    "app",
+		Services:   []string{"web:8080:8081"},
+		Worktree:   dir,
+		ConfigPath: outside,
+	})
+	ae, ok := apperr.As(err)
+	if !ok || ae.Code != "usage" {
+		t.Fatalf("err = %v, want usage", err)
+	}
+}
+
+func TestInitValidatesFlagsBeforeConfigExists(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "portucca.json")
+	if err := os.WriteFile(path, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{
+		Locator:  fakeLocator{ctx: project.Context{Root: dir}},
+		Config:   config.Loader{},
+		Registry: &fakeRegistry{reg: domain.Registry{Version: 1}},
+		Locker:   fakeLocker{},
+	}
+	cases := []InitRequest{
+		{Project: "app", Services: []string{"web:bad:8081"}, Worktree: dir},
+		{Project: "app", Services: []string{"web:8080:8081"}, Preset: "nope", Worktree: dir},
+	}
+	for _, req := range cases {
+		_, err := app.Init(context.Background(), req)
+		ae, ok := apperr.As(err)
+		if !ok || ae.Code != "usage" {
+			t.Fatalf("req = %+v: err = %v, want usage", req, err)
+		}
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "{}\n" {
+		t.Fatalf("config was overwritten: %q err=%v", data, err)
+	}
+}
+
 func TestInitForceOverwritesConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "portucca.json")

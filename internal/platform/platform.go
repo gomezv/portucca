@@ -11,6 +11,13 @@ var (
 	ErrUnsupported = errors.New("unsupported_platform")
 )
 
+func Check() error {
+	if !platformSupported {
+		return ErrUnsupported
+	}
+	return nil
+}
+
 func RealPath(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {

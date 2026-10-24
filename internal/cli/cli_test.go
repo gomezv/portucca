@@ -262,6 +262,19 @@ func TestInitRequiresProjectAndService(t *testing.T) {
 	}
 }
 
+func TestInitMissingFlagsWithNoHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+	var out, errb bytes.Buffer
+	code := Run([]string{"init"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errb.String(), "--project") {
+		t.Fatalf("stderr = %q, want the missing flag message", errb.String())
+	}
+}
+
 func TestHelpExitsZero(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := Run([]string{"--help"}, &out, &errb)

@@ -44,7 +44,7 @@ func desiredValues(cfg domain.Config, services map[domain.ServiceName]domain.Ser
 
 func desiredEnv(root string, cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim) []EnvValue {
 	values := desiredValues(cfg, services)
-	var out []EnvValue
+	out := make([]EnvValue, 0, len(values))
 	for file, kv := range values {
 		for key, value := range kv {
 			out = append(out, EnvValue{File: filepath.Join(root, file), Key: key, Value: value})
@@ -102,6 +102,22 @@ func occupiedFrom(reg domain.Registry, exceptPath string) map[domain.Port]string
 		for _, sc := range claim.Services {
 			out[sc.Port] = claim.Path
 		}
+	}
+	return out
+}
+
+func reservedMainPorts(cfg domain.Config) map[domain.Port]string {
+	out := make(map[domain.Port]string, len(cfg.Services))
+	for _, svc := range cfg.Services {
+		out[svc.MainPort] = "main"
+	}
+	return out
+}
+
+func occupiedWithMainPorts(cfg domain.Config, reg domain.Registry, exceptPath string) map[domain.Port]string {
+	out := occupiedFrom(reg, exceptPath)
+	for port, marker := range reservedMainPorts(cfg) {
+		out[port] = marker
 	}
 	return out
 }

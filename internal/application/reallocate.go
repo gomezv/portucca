@@ -44,7 +44,7 @@ func (a *App) Reallocate(ctx context.Context, worktree string) (EnsureResult, er
 	}
 	res, err := allocation.Plan(allocation.Request{
 		Config:   cfg,
-		Occupied: occupiedFrom(reg, c.Root),
+		Occupied: occupiedWithMainPorts(cfg, reg, c.Root),
 		Exclude:  exclude,
 		Prober:   a.Prober,
 	})

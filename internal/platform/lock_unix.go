@@ -18,6 +18,10 @@ func Lock(path string, timeout time.Duration, shared bool) (func() error, error)
 	if err != nil {
 		return nil, err
 	}
+	if err := f.Chmod(0o600); err != nil {
+		f.Close()
+		return nil, err
+	}
 	how := syscall.LOCK_EX
 	if shared {
 		how = syscall.LOCK_SH

@@ -66,5 +66,8 @@ func (a *App) Setup(ctx context.Context, worktree string) (SetupResult, error) {
 	if err != nil {
 		return SetupResult{}, err
 	}
+	if len(boot.Copied) > 0 || len(boot.Symlinked) > 0 {
+		ensure.Changed = true
+	}
 	return SetupResult{EnsureResult: ensure, Bootstrap: boot}, nil
 }

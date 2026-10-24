@@ -134,6 +134,12 @@ func execute(cmd string, args []string) (any, bool, error) {
 	if cmd == "list" && all && projectFlag != "" {
 		return nil, g.json, apperr.New("usage", "--all and --project are mutually exclusive", "")
 	}
+	if cmd == "init" && (initProject == "" || len(services) == 0) {
+		return nil, g.json, apperr.New("usage", "--project and at least one --service are required", "")
+	}
+	if err := platform.Check(); err != nil {
+		return nil, g.json, apperr.New("unsupported_platform", err.Error(), "esta plataforma todavía no está soportada")
+	}
 	if cmd == "version" {
 		return versionInfo{
 			Version: buildinfo.Version,
@@ -184,9 +190,6 @@ func execute(cmd string, args []string) (any, bool, error) {
 		data, err := app.List(ctx, g.worktree, projectFlag, all)
 		return data, g.json, err
 	case "init":
-		if initProject == "" || len(services) == 0 {
-			return nil, g.json, apperr.New("usage", "--project and at least one --service are required", "")
-		}
 		data, err := app.Init(ctx, application.InitRequest{
 			Project: initProject, Services: services, Preset: initPreset, Force: initForce,
 			Worktree: g.worktree, ConfigPath: g.config,

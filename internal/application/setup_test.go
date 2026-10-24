@@ -53,6 +53,33 @@ func TestSetupBootstrapsThenEnsures(t *testing.T) {
 	}
 }
 
+func TestSetupBootstrapMarksChanged(t *testing.T) {
+	root := t.TempDir()
+	cfg := bootstrapConfig()
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version: 1,
+		Worktrees: []domain.Claim{{
+			Project:  "app",
+			Path:     root,
+			Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3001}},
+		}},
+	}}
+	env := &bootstrapEnv{fakeEnv: &fakeEnv{
+		files: map[string]map[string]string{".env.local": {"PORT": "3001"}},
+	}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: "/repo", IsMain: false}}, cfg, reg, env)
+	got, err := app.Setup(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Bootstrap.Copied) != 1 || !got.Changed {
+		t.Fatalf("got = %+v, want a copied bootstrap and changed true", got)
+	}
+	if reg.saves != 0 {
+		t.Fatalf("registry saved without changes: %d", reg.saves)
+	}
+}
+
 type failingCopyEnv struct {
 	*fakeEnv
 }

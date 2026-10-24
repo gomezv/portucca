@@ -45,12 +45,9 @@ func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
 			return InitResult{}, apperr.New("config_invalid", err.Error(), "revisa --config")
 		}
 		if filepath.Dir(abs) != c.Root {
-			return InitResult{}, apperr.New("config_invalid", "--config must live at the repo root", "usa la raíz del repo")
+			return InitResult{}, apperr.New("usage", "--config must live at the repo root", "usa la raíz del repo")
 		}
 		path = abs
-	}
-	if _, err := os.Stat(path); err == nil && !req.Force {
-		return InitResult{}, apperr.New("config_exists", "portucca.json ya existe", "usa --force para sobrescribirlo")
 	}
 	services := map[domain.ServiceName]domain.Service{}
 	for _, spec := range req.Services {
@@ -67,6 +64,9 @@ func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
 	cfg, err := config.ApplyPreset(preset, domain.Project(req.Project), services)
 	if err != nil {
 		return InitResult{}, apperr.New("usage", err.Error(), "revisa --project, --service y --preset")
+	}
+	if _, err := os.Stat(path); err == nil && !req.Force {
+		return InitResult{}, apperr.New("config_exists", "portucca.json ya existe", "usa --force para sobrescribirlo")
 	}
 	warning := ""
 	if a.Registry != nil && a.Locker != nil {

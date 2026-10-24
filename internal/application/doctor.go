@@ -148,14 +148,29 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 		}
 	}
 	if haveConfig {
-		if own := findClaim(reg, c.Root); own != nil && a.EnvStore != nil {
-			desired := desiredValues(cfg, own.Services)
-			for _, target := range cfg.Env {
-				expected := desired[target.File][target.Key]
-				got, ok, err := a.EnvStore.ReadValue(c.Root, domain.EnvRef{File: target.File, Key: target.Key})
-				if err != nil || !ok || got != expected {
-					result.Warnings = append(result.Warnings, Issue{Code: "env_out_of_sync", Message: filepath.Join(target.File, target.Key)})
-				}
+		own := findClaim(reg, c.Root)
+		desired := map[string]map[string]string{}
+		if own != nil {
+			desired = desiredValues(cfg, own.Services)
+		}
+		for _, target := range cfg.Env {
+			path := filepath.Join(c.Root, target.File)
+			info, statErr := os.Lstat(path)
+			if errors.Is(statErr, fs.ErrNotExist) {
+				result.Warnings = append(result.Warnings, Issue{Code: "env_missing", Message: target.File})
+				continue
+			}
+			if statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+				result.Warnings = append(result.Warnings, Issue{Code: "env_symlink", Message: target.File})
+				continue
+			}
+			if own == nil || a.EnvStore == nil {
+				continue
+			}
+			expected := desired[target.File][target.Key]
+			got, ok, err := a.EnvStore.ReadValue(c.Root, domain.EnvRef{File: target.File, Key: target.Key})
+			if err != nil || !ok || got != expected {
+				result.Warnings = append(result.Warnings, Issue{Code: "env_out_of_sync", Message: filepath.Join(target.File, target.Key)})
 			}
 		}
 		for _, link := range cfg.Bootstrap.Symlinks {
@@ -178,6 +193,9 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 			}
 		}
 		for _, rel := range cfg.Bootstrap.CopyFromMain {
+			if _, err := os.Lstat(filepath.Join(c.MainRoot, rel)); errors.Is(err, fs.ErrNotExist) {
+				result.Warnings = append(result.Warnings, Issue{Code: "bootstrap_source_missing", Message: rel})
+			}
 			if _, err := os.Lstat(filepath.Join(c.Root, rel)); errors.Is(err, fs.ErrNotExist) {
 				result.Warnings = append(result.Warnings, Issue{Code: "bootstrap_pending", Message: rel})
 			}

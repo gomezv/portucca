@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -140,6 +142,63 @@ func TestEnsureMainDoesNotWrite(t *testing.T) {
 	}
 	if reg.saves != 0 || len(env.files) != 0 {
 		t.Fatalf("main wrote: saves=%d env=%+v", reg.saves, env.files)
+	}
+}
+
+func TestEnsureDoesNotAdoptMainPort(t *testing.T) {
+	ref := domain.EnvRef{File: ".env.local", Key: "PORT"}
+	cfg := domain.Config{
+		Version: 1,
+		Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 5173, StartPort: 5174},
+			"api": {MainPort: 3004, StartPort: 3005, AdoptFrom: &ref},
+		},
+		Env: []domain.EnvTarget{{Service: "api", File: ".env.local", Key: "PORT"}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 1}}
+	env := &fakeEnv{reads: map[string]domain.Port{"PORT": 5173}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: "/wt", MainRoot: "/repo", IsMain: false}}, cfg, reg, env)
+	got, err := app.Ensure(context.Background(), "/wt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := got.Services["api"]
+	if api.Port != 3005 || api.Adopted {
+		t.Fatalf("api = %+v, want port 3005 without adoption", api)
+	}
+	if got.Services["web"].Port != 5174 {
+		t.Fatalf("web = %+v, want port 5174", got.Services["web"])
+	}
+	if env.files[".env.local"]["PORT"] != "3005" {
+		t.Fatalf("env = %+v, want PORT=3005", env.files)
+	}
+}
+
+func TestEnsureEnvSerializesAsEmptyArray(t *testing.T) {
+	root := t.TempDir()
+	cfg := domain.Config{
+		Version: 1,
+		Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 3000, StartPort: 3001},
+		},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 1}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root, IsMain: false}}, cfg, reg, &fakeEnv{})
+	got, err := app.Ensure(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Env == nil {
+		t.Fatal("Env is nil, want an empty slice")
+	}
+	data, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"env":[]`) {
+		t.Fatalf("json = %s, want \"env\":[]", data)
 	}
 }
 

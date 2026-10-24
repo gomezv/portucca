@@ -70,7 +70,7 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config) (EnsureResult, 
 	res, err := allocation.Plan(allocation.Request{
 		Config:   cfg,
 		Existing: existing,
-		Occupied: occupiedFrom(reg, c.Root),
+		Occupied: occupiedWithMainPorts(cfg, reg, c.Root),
 		Prober:   a.Prober,
 		ReadPort: func(ref domain.EnvRef) (domain.Port, bool, error) {
 			return a.EnvStore.ReadPort(c.Root, ref)

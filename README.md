@@ -100,7 +100,8 @@ humano.
 
 ## Estado
 
-v1 en desarrollo. La instalación descrita aplica desde el primer release `v0.1.0`.
+La CLI de la v1 está implementada. La instalación descrita aplica desde el primer release
+`v0.1.0`.
 
 ## Contribuir
 

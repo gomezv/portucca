@@ -1,0 +1,56 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags "-s -w -X github.com/gomezv/portucca/internal/buildinfo.Version=${GITHUB_REF_NAME} -X github.com/gomezv/portucca/internal/buildinfo.Commit=${GITHUB_SHA}" -o dist/portucca ./cmd/portucca
+          tar -czf "dist/portucca_${GOOS}_${GOARCH}.tar.gz" -C dist portucca
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portucca_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: dist/portucca_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: portucca_*
+          merge-multiple: true
+          path: dist
+      - name: Checksums
+        run: cd dist && sha256sum *.tar.gz > checksums.txt
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/*.tar.gz dist/checksums.txt --generate-notes

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "project": "monorepo-app",
+  "services": {
+    "web": { "mainPort": 15173, "startPort": 15174 },
+    "api": { "mainPort": 13004, "startPort": 13005 }
+  },
+  "env": [
+    { "service": "web", "file": "apps/web/.env.local", "key": "WEB_PORT" },
+    { "service": "api", "file": "apps/api/.env.local", "key": "PORT" },
+    { "service": "api", "file": "apps/web/.env.local", "key": "API_PROXY_TARGET", "template": "http://localhost:{{port}}" }
+  ]
+}

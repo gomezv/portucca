@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "project": "generic-app",
+  "services": {
+    "web": { "mainPort": 18080, "startPort": 18081 }
+  },
+  "env": [
+    { "service": "web", "file": ".env.local", "key": "PORT" }
+  ],
+  "bootstrap": {
+    "copyFromMain": [".env"],
+    "symlinks": [
+      { "path": ".env.link", "target": ".env" }
+    ]
+  }
+}

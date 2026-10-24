@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -41,7 +42,7 @@ func Lock(path string, timeout time.Duration, shared bool) (func() error, error)
 		}
 		if time.Now().After(deadline) {
 			f.Close()
-			return nil, ErrLockTimeout
+			return nil, fmt.Errorf("%w: %s", ErrLockTimeout, path)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}

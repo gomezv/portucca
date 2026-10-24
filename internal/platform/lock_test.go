@@ -3,6 +3,7 @@ package platform
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -14,8 +15,12 @@ func TestExclusiveLockBlocks(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer unlock()
-	if _, err := Lock(path, 50*time.Millisecond, false); !errors.Is(err, ErrLockTimeout) {
+	_, err = Lock(path, 50*time.Millisecond, false)
+	if !errors.Is(err, ErrLockTimeout) {
 		t.Fatalf("err = %v, want ErrLockTimeout", err)
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Fatalf("err = %q, want message containing lock path %q", err, path)
 	}
 }
 

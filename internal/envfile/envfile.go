@@ -324,3 +324,21 @@ func EnsureSymlink(wtRoot string, s domain.Symlink) (bool, error) {
 	}
 	return true, nil
 }
+
+type Store struct{}
+
+func (Store) ReadPort(root string, ref domain.EnvRef) (domain.Port, bool, error) {
+	return ReadPort(root, ref)
+}
+func (Store) ReadValue(root string, ref domain.EnvRef) (string, bool, error) {
+	return ReadValue(root, ref)
+}
+func (Store) WriteValues(root string, values map[string]map[string]string) (bool, error) {
+	return WriteValues(root, values)
+}
+func (Store) CopyFromMain(mainRoot, wtRoot, rel string) (bool, error) {
+	return CopyFromMain(mainRoot, wtRoot, rel)
+}
+func (Store) EnsureSymlink(wtRoot string, s domain.Symlink) (bool, error) {
+	return EnsureSymlink(wtRoot, s)
+}

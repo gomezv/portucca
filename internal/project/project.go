@@ -76,3 +76,7 @@ func git(dir string, args ...string) (string, error) {
 	}
 	return strings.TrimSpace(out.String()), nil
 }
+
+type Detector struct{}
+
+func (Detector) Detect(path string) (Context, error) { return Detect(path) }

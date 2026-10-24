@@ -68,3 +68,8 @@ func WriteFile(path string, cfg domain.Config) error {
 	}
 	return os.Rename(name, path)
 }
+
+type Loader struct{}
+
+func (Loader) LoadRoot(root string) (domain.Config, string, error) { return LoadRoot(root) }
+func (Loader) LoadFile(path string) (domain.Config, error)         { return LoadFile(path) }

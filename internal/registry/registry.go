@@ -136,3 +136,5 @@ func (s Store) Save(reg domain.Registry) error {
 	}
 	return nil
 }
+
+func (s Store) LockPath() string { return s.Path + ".lock" }

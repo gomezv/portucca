@@ -66,7 +66,7 @@ func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
 	}
 	cfg, err := config.ApplyPreset(preset, domain.Project(req.Project), services)
 	if err != nil {
-		return InitResult{}, apperr.New("config_invalid", err.Error(), "revisa --project, --service y --preset")
+		return InitResult{}, apperr.New("usage", err.Error(), "revisa --project, --service y --preset")
 	}
 	warning := ""
 	if a.Registry != nil && a.Locker != nil {

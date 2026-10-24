@@ -167,8 +167,8 @@ func TestInitRejectsNodeViteNestWithoutRequiredServices(t *testing.T) {
 		Worktree: dir,
 	})
 	ae, ok := apperr.As(err)
-	if !ok || ae.Code != "config_invalid" {
-		t.Fatalf("err = %v, want config_invalid", err)
+	if !ok || ae.Code != "usage" {
+		t.Fatalf("err = %v, want usage", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "portucca.json")); !os.IsNotExist(err) {
 		t.Fatalf("invalid config was written: %v", err)

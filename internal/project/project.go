@@ -34,11 +34,11 @@ func Detect(path string) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
-	gitDir, err := git(path, "rev-parse", "--git-dir")
+	gitDir, err := git(root, "rev-parse", "--git-dir")
 	if err != nil {
 		return Context{}, ErrNotRepo
 	}
-	commonDir, err := git(path, "rev-parse", "--git-common-dir")
+	commonDir, err := git(root, "rev-parse", "--git-common-dir")
 	if err != nil {
 		return Context{}, ErrNotRepo
 	}

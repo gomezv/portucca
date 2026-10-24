@@ -73,13 +73,13 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config) (EnsureResult, 
 		Occupied: occupiedFrom(reg, c.Root),
 		Prober:   a.Prober,
 		ReadPort: func(ref domain.EnvRef) (domain.Port, bool, error) {
-			return a.Env.ReadPort(c.Root, ref)
+			return a.EnvStore.ReadPort(c.Root, ref)
 		},
 	})
 	if err != nil {
 		return EnsureResult{}, mapAllocErr(err)
 	}
-	envChanged, err := a.Env.WriteValues(c.Root, desiredValues(cfg, res.Services))
+	envChanged, err := a.EnvStore.WriteValues(c.Root, desiredValues(cfg, res.Services))
 	if err != nil {
 		return EnsureResult{}, apperr.New("env_write", err.Error(), "revisa los permisos de los archivos de entorno")
 	}

@@ -91,7 +91,7 @@ func testApp(locator fakeLocator, cfg domain.Config, reg *fakeRegistry, env EnvS
 		Registry: reg,
 		Locker:   fakeLocker{},
 		Prober:   fakeProber{},
-		Env:      env,
+		EnvStore: env,
 		Now:      func() time.Time { return time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC) },
 	}
 }

@@ -95,7 +95,7 @@ func TestDoctorReportsMissingConfigAndKeepsRegistry(t *testing.T) {
 		Registry: reg,
 		Locker:   fakeLocker{},
 		Prober:   fakeProber{},
-		Env:      &fakeEnv{},
+		EnvStore: &fakeEnv{},
 	}
 	got, err := app.Doctor(context.Background(), root)
 	if err != nil {
@@ -198,7 +198,7 @@ func TestDoctorReadsPerClaimConfigWithOverride(t *testing.T) {
 		Registry:   reg,
 		Locker:     fakeLocker{},
 		Prober:     fakeProber{},
-		Env:        &fakeEnv{},
+		EnvStore:   &fakeEnv{},
 		ConfigFile: filepath.Join(root, "portucca.json"),
 	}
 	got, err := app.Doctor(context.Background(), root)
@@ -312,7 +312,7 @@ func TestDoctorTakesSharedLock(t *testing.T) {
 		Registry: &fakeRegistry{reg: domain.Registry{Version: 1}},
 		Locker:   locker,
 		Prober:   fakeProber{},
-		Env:      &fakeEnv{},
+		EnvStore: &fakeEnv{},
 	}
 	if _, err := app.Doctor(context.Background(), root); err != nil {
 		t.Fatal(err)

@@ -44,7 +44,7 @@ type App struct {
 	Registry    RegistryStore
 	Locker      Locker
 	Prober      Prober
-	Env         EnvStore
+	EnvStore    EnvStore
 	ConfigFile  string
 	Now         func() time.Time
 	LockTimeout time.Duration

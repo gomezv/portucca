@@ -41,7 +41,7 @@ func (a *App) Setup(ctx context.Context, worktree string) (SetupResult, error) {
 	defer unlock()
 	boot := BootstrapResult{Copied: []string{}, Symlinked: []string{}, Skipped: []string{}}
 	for _, rel := range cfg.Bootstrap.CopyFromMain {
-		copied, err := a.Env.CopyFromMain(c.MainRoot, c.Root, rel)
+		copied, err := a.EnvStore.CopyFromMain(c.MainRoot, c.Root, rel)
 		if err != nil {
 			return SetupResult{}, mapEnvErr(err)
 		}
@@ -52,7 +52,7 @@ func (a *App) Setup(ctx context.Context, worktree string) (SetupResult, error) {
 		}
 	}
 	for _, link := range cfg.Bootstrap.Symlinks {
-		created, err := a.Env.EnsureSymlink(c.Root, link)
+		created, err := a.EnvStore.EnsureSymlink(c.Root, link)
 		if err != nil {
 			return SetupResult{}, mapEnvErr(err)
 		}

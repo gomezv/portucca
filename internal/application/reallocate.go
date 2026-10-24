@@ -51,7 +51,7 @@ func (a *App) Reallocate(ctx context.Context, worktree string) (EnsureResult, er
 	if err != nil {
 		return EnsureResult{}, mapAllocErr(err)
 	}
-	if _, err := a.Env.WriteValues(c.Root, desiredValues(cfg, res.Services)); err != nil {
+	if _, err := a.EnvStore.WriteValues(c.Root, desiredValues(cfg, res.Services)); err != nil {
 		return EnsureResult{}, apperr.New("env_write", err.Error(), "revisa los permisos de los archivos de entorno")
 	}
 	reg = upsertClaim(reg, domain.Claim{Project: cfg.Project, Path: c.Root, Services: res.Services, UpdatedAt: a.now()})

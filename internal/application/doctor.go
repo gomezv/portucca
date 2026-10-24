@@ -148,11 +148,11 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 		}
 	}
 	if haveConfig {
-		if own := findClaim(reg, c.Root); own != nil && a.Env != nil {
+		if own := findClaim(reg, c.Root); own != nil && a.EnvStore != nil {
 			desired := desiredValues(cfg, own.Services)
 			for _, target := range cfg.Env {
 				expected := desired[target.File][target.Key]
-				got, ok, err := a.Env.ReadValue(c.Root, domain.EnvRef{File: target.File, Key: target.Key})
+				got, ok, err := a.EnvStore.ReadValue(c.Root, domain.EnvRef{File: target.File, Key: target.Key})
 				if err != nil || !ok || got != expected {
 					result.Warnings = append(result.Warnings, Issue{Code: "env_out_of_sync", Message: filepath.Join(target.File, target.Key)})
 				}

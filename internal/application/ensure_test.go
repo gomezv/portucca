@@ -175,6 +175,38 @@ func TestEnsureDoesNotAdoptMainPort(t *testing.T) {
 	}
 }
 
+func TestEnsureClaimOnMainPortIsDuplicate(t *testing.T) {
+	root := t.TempDir()
+	cfg := domain.Config{
+		Version: 1,
+		Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 3000, StartPort: 3001},
+		},
+		Env: []domain.EnvTarget{{Service: "web", File: ".env.local", Key: "PORT"}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version: 1,
+		Worktrees: []domain.Claim{{
+			Project:  "app",
+			Path:     root,
+			Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3000}},
+		}},
+	}}
+	env := &fakeEnv{files: map[string]map[string]string{".env.local": {"PORT": "3000"}}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root, IsMain: false}}, cfg, reg, env)
+	_, err := app.Ensure(context.Background(), root)
+	if err == nil {
+		t.Fatal("expected duplicate_claim")
+	}
+	if code := errorCode(t, err); code != "duplicate_claim" {
+		t.Fatalf("code = %q, want duplicate_claim", code)
+	}
+	if reg.saves != 0 {
+		t.Fatalf("registry was saved after the failure: %d", reg.saves)
+	}
+}
+
 func TestEnsureEnvSerializesAsEmptyArray(t *testing.T) {
 	root := t.TempDir()
 	cfg := domain.Config{

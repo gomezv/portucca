@@ -107,6 +107,30 @@ func TestPlanExistingClaimOutOfBand(t *testing.T) {
 	}
 }
 
+func TestPlanExistingClaimOnMainPortIsDuplicate(t *testing.T) {
+	cfg := domain.Config{
+		Version: 1,
+		Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 3000, StartPort: 3001},
+		},
+	}
+	_, err := Plan(Request{
+		Config:   cfg,
+		Existing: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3000}},
+		Occupied: map[domain.Port]string{3000: "main"},
+		Prober:   fakeProber{},
+	})
+	var duplicate *DuplicateClaimError
+	if !errors.As(err, &duplicate) {
+		t.Fatalf("err = %v, want DuplicateClaimError", err)
+	}
+	var outOfBand *OutOfBandError
+	if errors.As(err, &outOfBand) {
+		t.Fatalf("err = %v, want duplicate before band", err)
+	}
+}
+
 func TestPlanExistingClaimInvalidPort(t *testing.T) {
 	cfg := baseConfig()
 	_, err := Plan(Request{

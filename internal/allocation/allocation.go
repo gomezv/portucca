@@ -74,14 +74,17 @@ func Plan(req Request) (Result, error) {
 			continue
 		}
 		svc := req.Config.Services[name]
-		if !claim.Port.Valid() || claim.Port < svc.StartPort {
+		if !claim.Port.Valid() {
 			return Result{}, &OutOfBandError{Service: name, Port: claim.Port}
+		}
+		if req.Occupied[claim.Port] != "" {
+			return Result{}, &DuplicateClaimError{Port: claim.Port}
 		}
 		if used[claim.Port] {
 			return Result{}, &DuplicateClaimError{Port: claim.Port}
 		}
-		if req.Occupied[claim.Port] != "" {
-			return Result{}, &DuplicateClaimError{Port: claim.Port}
+		if claim.Port < svc.StartPort {
+			return Result{}, &OutOfBandError{Service: name, Port: claim.Port}
 		}
 		used[claim.Port] = true
 		result.Services[name] = claim

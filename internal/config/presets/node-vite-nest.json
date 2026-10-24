@@ -1,0 +1,14 @@
+{
+  "services": ["web", "api"],
+  "env": [
+    { "service": "web", "file": "apps/web/.env.local", "key": "WEB_PORT" },
+    { "service": "api", "file": "apps/api/.env.local", "key": "PORT" },
+    { "service": "api", "file": "apps/web/.env.local", "key": "API_PROXY_TARGET", "template": "http://localhost:{{port}}" }
+  ],
+  "bootstrap": {
+    "copyFromMain": [".env"],
+    "symlinks": [
+      { "path": "apps/api/.env", "target": "../../.env" }
+    ]
+  }
+}

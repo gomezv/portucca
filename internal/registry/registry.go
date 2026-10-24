@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -40,11 +41,28 @@ func (s Store) Load() (domain.Registry, error) {
 	if err != nil {
 		return domain.Registry{}, err
 	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(data, &top); err != nil {
+		return domain.Registry{}, fmt.Errorf("%w: %w", ErrCorrupt, err)
+	}
+	raw, ok := top["worktrees"]
+	if !ok {
+		return domain.Registry{}, fmt.Errorf("%w: missing worktrees", ErrCorrupt)
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return domain.Registry{}, fmt.Errorf("%w: null worktrees", ErrCorrupt)
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var reg domain.Registry
 	if err := dec.Decode(&reg); err != nil {
-		return domain.Registry{}, fmt.Errorf("%w: %v", ErrCorrupt, err)
+		return domain.Registry{}, fmt.Errorf("%w: %w", ErrCorrupt, err)
+	}
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return domain.Registry{}, fmt.Errorf("%w: trailing data", ErrCorrupt)
+		}
+		return domain.Registry{}, fmt.Errorf("%w: %w", ErrCorrupt, err)
 	}
 	if reg.Version != domain.RegistryVersion {
 		return domain.Registry{}, fmt.Errorf("%w: %d", ErrVersion, reg.Version)
@@ -64,6 +82,15 @@ func (s Store) Load() (domain.Registry, error) {
 
 func (s Store) Save(reg domain.Registry) error {
 	reg.Version = domain.RegistryVersion
+	if reg.Worktrees == nil {
+		reg.Worktrees = []domain.Claim{}
+	}
+	claims := make([]domain.Claim, len(reg.Worktrees))
+	copy(claims, reg.Worktrees)
+	reg.Worktrees = claims
+	for i := range reg.Worktrees {
+		reg.Worktrees[i].UpdatedAt = reg.Worktrees[i].UpdatedAt.UTC()
+	}
 	sort.Slice(reg.Worktrees, func(i, j int) bool {
 		if reg.Worktrees[i].Project != reg.Worktrees[j].Project {
 			return reg.Worktrees[i].Project < reg.Worktrees[j].Project

@@ -204,3 +204,136 @@ func TestDefaultPathFallsBackToHome(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+func TestLoadMissingWorktreesFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(path, []byte(`{"version":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Store{Path: path}).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestLoadNullWorktreesFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"worktrees":null}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Store{Path: path}).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestLoadEmptyWorktreesSucceeds(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"worktrees":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := (Store{Path: path}).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reg.Version != domain.RegistryVersion || len(reg.Worktrees) != 0 {
+		t.Fatalf("registry = %+v", reg)
+	}
+}
+
+func TestLoadTrailingDataFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"worktrees":[]} trailing`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Store{Path: path}).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestLoadSecondDocumentFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	data := `{"version":1,"worktrees":[]}{"version":1,"worktrees":[]}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Store{Path: path}).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestLoadUnknownFieldFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"worktrees":[],"extra":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Store{Path: path}).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestSaveEmptyWritesArray(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := (Store{Path: path}).Save(domain.Registry{}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(raw["worktrees"]); got != "[]" {
+		t.Fatalf("worktrees = %s, want []", got)
+	}
+}
+
+func TestSaveDoesNotReorderCaller(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	in := domain.Registry{
+		Version: domain.RegistryVersion,
+		Worktrees: []domain.Claim{
+			{Project: "beta", Path: "/b", Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 5002}}},
+			{Project: "alpha", Path: "/a", Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 5003}}},
+		},
+	}
+	if err := (Store{Path: path}).Save(in); err != nil {
+		t.Fatal(err)
+	}
+	if in.Worktrees[0].Project != "beta" || in.Worktrees[1].Project != "alpha" {
+		t.Fatalf("caller slice reordered: %+v", in.Worktrees)
+	}
+}
+
+func TestSaveNormalizesUpdatedAtUTC(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	updated := time.Date(2026, 10, 24, 12, 0, 0, 0, time.FixedZone("UTC+2", 2*60*60))
+	in := domain.Registry{
+		Version: domain.RegistryVersion,
+		Worktrees: []domain.Claim{{
+			Project:   "app",
+			Path:      "/worktree",
+			Services:  map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 5174}},
+			UpdatedAt: updated,
+		}},
+	}
+	if err := (Store{Path: path}).Save(in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := (Store{Path: path}).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.Worktrees[0].UpdatedAt
+	if got.Location() != time.UTC {
+		t.Fatalf("location = %v, want UTC", got.Location())
+	}
+	if !got.Equal(updated) {
+		t.Fatalf("updatedAt = %v, want %v", got, updated)
+	}
+}

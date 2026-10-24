@@ -1,24 +1,58 @@
-# portucca-internal
+# portucca
 
-Documentación interna de **portucca**. El código vive en el repo público
-[`portucca`](https://github.com/gomezv/portucca).
+Un puerto estable por worktree. Sticky, auditable, sin `EADDRINUSE`.
 
-- `docs/`: SPEC, DESIGN, DECISIONS, ROADMAP, COMPETITORS, PUBLISHING y ADOPTION.
-- Este repo no contiene código ni se publica.
+Portucca reparte puertos de desarrollo entre los worktrees de un repositorio git (y entre
+proyectos que comparten la misma máquina), de forma **pegajosa** (el mismo worktree siempre
+obtiene los mismos puertos) y **fail-fast** (si hay conflicto, el proceso muere con un
+mensaje explícito en vez de mudarse de puerto en silencio).
 
-## Cómo se trabaja
+## Qué resuelve
 
-1. El código se edita y revisa en el repo público.
-2. Las decisiones y el diseño se registran aquí, en `docs/`.
-3. Si un cambio necesita una decisión, primero se anota en `docs/DECISIONS.md`; después se
-   implementa en el repo público.
+| Problema | Qué hace portucca |
+|---|---|
+| Dos worktrees piden el mismo puerto | Asigna un bloque de puertos por worktree, con registro compartido y bloqueo (`flock`) |
+| El puerto cambia en cada arranque | El claim sigue al **directorio** del worktree: si el stack baja y vuelve, la URL es la misma |
+| Vite se muda de puerto solo | `strictPort: true`: conflicto = `EADDRINUSE` explícito, nunca drift silencioso |
+| Un worktree sin `.env` no arranca | Bootstrap del entorno: copia el `.env` del checkout principal, symlinks y `.env.local` por worktree |
+| Dos proyectos en la misma máquina se pisan | Un único registro a nivel máquina, con claim etiquetado por proyecto |
 
-## Documentos
+## Qué NO resuelve (v1)
 
-- [`docs/SPEC.md`](docs/SPEC.md)
-- [`docs/DESIGN.md`](docs/DESIGN.md)
-- [`docs/DECISIONS.md`](docs/DECISIONS.md)
-- [`docs/ROADMAP.md`](docs/ROADMAP.md)
-- [`docs/COMPETITORS.md`](docs/COMPETITORS.md)
-- [`docs/PUBLISHING.md`](docs/PUBLISHING.md)
-- [`docs/ADOPTION-SEUCCA.md`](docs/ADOPTION-SEUCCA.md)
+- Base de datos por worktree
+- Supervisión de procesos, proxies por subdominio o certificados
+- Contenedores / devcontainers
+- Orquestación de agentes: portucca no crea worktrees ni lanza nada; solo reparte puertos y
+  escribe archivos de entorno
+
+## Estado
+
+Implementación **pendiente**. La política nació en un proyecto real y este repositorio la
+extrae, la generaliza y la publica.
+
+## Instalación (prevista)
+
+```bash
+npx portucca@0.1.0 ensure          # asigna (o recuerda) los puertos de este worktree
+npx portucca@0.1.0 doctor          # diagnóstico: claims, conflictos, puertos ocupados
+```
+
+En los proyectos consumidores se instala como dependencia de desarrollo versionada:
+
+```bash
+pnpm add -D portucca@0.1.0
+```
+
+## Requisitos
+
+- Linux (el bloqueo usa `flock` de util-linux)
+- Node.js >= 20
+
+## Contribuir
+
+Los issues y los PRs son bienvenidos. Abre un issue para bugs o propuestas y revisa
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Licencia
+
+MIT. Ver [`LICENSE`](LICENSE).

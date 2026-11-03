@@ -134,14 +134,14 @@ func execute(cmd string, args []string) (any, bool, error) {
 	default:
 		// ensure, setup, reallocate, prune, doctor, env use only global flags.
 	}
-	if cmd == "run" && !hasSeparator(args) {
-		return nil, false, apperr.New("usage", "run: missing -- before the command", "use -- <command> [args...]")
-	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil, g.json, errHelp
 		}
 		return nil, g.json, apperr.New("usage", err.Error(), "check the flags")
+	}
+	if cmd == "run" && !hasSeparator(args) {
+		return nil, false, apperr.New("usage", "run: missing -- before the command", "use -- <command> [args...]")
 	}
 	if !knownCommands[cmd] {
 		return nil, g.json, apperr.New("usage", "unknown command: "+cmd, "")

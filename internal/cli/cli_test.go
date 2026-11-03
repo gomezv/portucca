@@ -322,6 +322,16 @@ func TestHasSeparator(t *testing.T) {
 	}
 }
 
+func TestRunHelp(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := Run([]string{"run", "--help"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d, stderr = %s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "portucca run") {
+		t.Fatalf("stdout = %q, want run usage", out.String())
+	}
+}
+
 func newGitWorktree(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

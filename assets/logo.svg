@@ -1,9 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="portucca">
   <rect width="512" height="512" rx="112" fill="#0B1220"/>
   <rect x="8" y="8" width="496" height="496" rx="104" fill="none" stroke="#1F2937" stroke-width="8"/>
-  <rect x="206" y="144" width="30" height="104" rx="15" fill="#E5E7EB"/>
-  <rect x="276" y="144" width="30" height="104" rx="15" fill="#E5E7EB"/>
-  <rect x="168" y="220" width="176" height="160" rx="52" fill="#34D399"/>
-  <path d="M256 376 V424 H316" fill="none" stroke="#E5E7EB" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="332" cy="424" r="16" fill="#FBBF24"/>
+  <defs>
+    <clipPath id="tower-simple">
+      <path d="M224 208 H288 L316 384 H196 Z"/>
+    </clipPath>
+  </defs>
+  <path d="M224 208 H288 L316 384 H196 Z" fill="#34D399"/>
+  <g clip-path="url(#tower-simple)">
+    <rect x="180" y="250" width="152" height="24" fill="#E5E7EB"/>
+    <rect x="180" y="310" width="152" height="24" fill="#E5E7EB"/>
+  </g>
+  <rect x="216" y="184" width="80" height="24" rx="8" fill="#E5E7EB"/>
+  <rect x="228" y="144" width="56" height="44" rx="10" fill="#E5E7EB"/>
+  <circle cx="256" cy="166" r="12" fill="#FBBF24"/>
+  <path d="M128 408 Q160 384 192 408 T256 408 T320 408 T384 408" fill="none" stroke="#E5E7EB" stroke-width="16" stroke-linecap="round"/>
+  <path d="M160 440 Q192 416 224 440 T288 440 T352 440" fill="none" stroke="#34D399" stroke-width="14" stroke-linecap="round"/>
 </svg>

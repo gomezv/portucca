@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" role="img" aria-label="portucca">
+  <defs>
+    <symbol id="icon-detail" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#0B1220"/>
+      <rect x="8" y="8" width="496" height="496" rx="104" fill="none" stroke="#1F2937" stroke-width="8"/>
+      <defs>
+        <clipPath id="tower-lockup">
+          <path d="M224 208 H288 L316 384 H196 Z"/>
+        </clipPath>
+      </defs>
+      <path d="M224 208 H288 L316 384 H196 Z" fill="#34D399"/>
+      <g clip-path="url(#tower-lockup)">
+        <rect x="180" y="250" width="152" height="24" fill="#E5E7EB"/>
+        <rect x="180" y="310" width="152" height="24" fill="#E5E7EB"/>
+      </g>
+      <rect x="216" y="184" width="80" height="24" rx="8" fill="#E5E7EB"/>
+      <rect x="228" y="144" width="56" height="44" rx="10" fill="#E5E7EB"/>
+      <circle cx="256" cy="166" r="12" fill="#FBBF24"/>
+      <path d="M256 384 V404 M256 396 H216 M256 396 H296" stroke="#E5E7EB" stroke-width="12" stroke-linecap="round" opacity="0.85"/>
+      <circle cx="216" cy="396" r="10" fill="#FBBF24"/>
+      <circle cx="296" cy="396" r="10" fill="#FBBF24"/>
+      <path d="M128 430 Q160 406 192 430 T256 430 T320 430 T384 430" fill="none" stroke="#E5E7EB" stroke-width="16" stroke-linecap="round"/>
+      <path d="M160 460 Q192 436 224 460 T288 460 T352 460" fill="none" stroke="#34D399" stroke-width="14" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+  <rect width="1000" height="300" rx="36" fill="#0B1220"/>
+  <rect x="6" y="6" width="988" height="288" rx="30" fill="none" stroke="#1F2937" stroke-width="4"/>
+  <use href="#icon-detail" x="60" y="30" width="240" height="240"/>
+  <text x="340" y="182" font-family="DejaVu Sans, Liberation Sans, sans-serif" font-size="104" font-weight="700" letter-spacing="-4" fill="#E5E7EB">portucca</text>
+</svg>

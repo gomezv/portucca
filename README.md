@@ -1,10 +1,10 @@
 # portucca
 
 <p align="center">
-  <img src="assets/logo.png" alt="portucca" width="160">
+  <img src="assets/lockup.png" alt="portucca" width="520">
 </p>
 
-<p align="center"><strong>One stable port per worktree. Sticky, auditable, no <code>EADDRINUSE</code>.</strong></p>
+<p align="center"><strong>Sticky ports for every worktree.</strong></p>
 
 <div align="center">
 

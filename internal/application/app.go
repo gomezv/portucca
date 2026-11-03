@@ -45,6 +45,7 @@ type App struct {
 	Locker      Locker
 	Prober      Prober
 	EnvStore    EnvStore
+	Executor    Executor
 	ConfigFile  string
 	Now         func() time.Time
 	LockTimeout time.Duration

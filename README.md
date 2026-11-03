@@ -1,6 +1,10 @@
 # portucca
 
-One stable port per worktree. Sticky, auditable, no `EADDRINUSE`.
+<p align="center">
+  <img src="assets/logo.png" alt="portucca" width="160">
+</p>
+
+<p align="center"><strong>One stable port per worktree. Sticky, auditable, no <code>EADDRINUSE</code>.</strong></p>
 
 <div align="center">
 
@@ -15,6 +19,21 @@ Portucca allocates development ports across the worktrees of a git repository (a
 projects sharing the same machine) in a **sticky** way (the same worktree always gets the same
 ports) and **fail-fast** (on a conflict, the process fails with an explicit message instead of
 silently moving to another port).
+
+## Contents
+
+- [What it solves](#what-it-solves)
+- [What it does not solve (v1)](#what-it-does-not-solve-v1)
+- [How it works](#how-it-works)
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+- [Commands](#commands)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Integration](#integration)
+- [Status](#status)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## What it solves
 
@@ -62,6 +81,7 @@ framework nor a specific `.env` layout.
 
 ## Installation
 
+> [!NOTE]
 > Portucca is not released yet. The `install.sh` and module commands below apply from
 > `v0.1.0`; until then, build from source.
 
@@ -201,8 +221,8 @@ portucca init --project app --preset next --service web:3000:3001
 
 It writes `PORT` and `NEXT_PUBLIC_URL` to `.env` and copies `.env` from the main checkout.
 
-`next dev` chooses its port before it loads `.env`, so a `PORT` value written by portucca is
-not enough for the server itself. Start Next through portucca:
+> [!IMPORTANT]
+> `next dev` chooses its port before it loads `.env`. Start Next through portucca:
 
 ```bash
 portucca run -- npm run dev
@@ -306,10 +326,12 @@ Commit `portucca.json` once; worktrees created from that branch read the same fi
 
 ### Shared local config
 
-If you do not want to version `portucca.json`, create it once in the main checkout and add it
-to `.gitignore`. Worktrees without their own `portucca.json` use the main checkout's config
-automatically; a worktree-local `portucca.json` takes precedence. `portucca setup --json` and
-`portucca doctor --json` report the config path in `configPath` and `config.path`.
+> [!TIP]
+> If you do not want to version `portucca.json`, create it once in the main checkout and add
+> it to `.gitignore`. Worktrees without their own `portucca.json` use the main checkout's
+> config automatically; a worktree-local `portucca.json` takes precedence. `portucca setup
+> --json` and `portucca doctor --json` report the config path in `configPath` and
+> `config.path`.
 
 The file is still local state: a fresh clone on another machine needs its own copy. Commit it
 when you want the config to travel with the repository.

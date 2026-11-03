@@ -281,8 +281,80 @@ func TestHelpExitsZero(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0", code)
 	}
-	if !strings.Contains(out.String(), "usage:") {
+	if !strings.Contains(out.String(), "Usage:") {
 		t.Fatalf("out = %q, want usage", out.String())
+	}
+	if !strings.Contains(out.String(), "Commands:") {
+		t.Fatalf("out = %q, want command list", out.String())
+	}
+}
+
+func TestCommandHelp(t *testing.T) {
+	commands := []string{"init", "ensure", "setup", "reallocate", "prune", "doctor", "env", "list", "run", "version", "help"}
+	for _, cmd := range commands {
+		t.Run(cmd, func(t *testing.T) {
+			var out, errb bytes.Buffer
+			if code := Run([]string{cmd, "--help"}, &out, &errb); code != 0 {
+				t.Fatalf("exit = %d, stderr = %s", code, errb.String())
+			}
+			text := out.String()
+			for _, want := range []string{"portucca " + cmd, "Usage:", "Examples:"} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("stdout = %q, want %q", text, want)
+				}
+			}
+			if errb.Len() != 0 {
+				t.Fatalf("stderr = %q, want empty", errb.String())
+			}
+		})
+	}
+}
+
+func TestCommandHelpSpecifics(t *testing.T) {
+	cases := []struct {
+		cmd  string
+		want []string
+	}{
+		{"init", []string{"--project", "--service", "--preset", "--force"}},
+		{"list", []string{"--all", "--project"}},
+		{"run", []string{"--service", "exec", "--json is not supported"}},
+		{"doctor", []string{"Exits 1"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.cmd, func(t *testing.T) {
+			var out, errb bytes.Buffer
+			if code := Run([]string{tc.cmd, "--help"}, &out, &errb); code != 0 {
+				t.Fatalf("exit = %d", code)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(out.String(), want) {
+					t.Fatalf("stdout = %q, want %q", out.String(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestHelpCommand(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := Run([]string{"help", "run"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d, stderr = %s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "portucca run") {
+		t.Fatalf("stdout = %q, want run help", out.String())
+	}
+	if errb.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", errb.String())
+	}
+}
+
+func TestHelpUnknownCommand(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := Run([]string{"help", "nope"}, &out, &errb); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errb.String(), "unknown command") {
+		t.Fatalf("stderr = %q, want unknown command", errb.String())
 	}
 }
 
@@ -329,6 +401,9 @@ func TestRunHelp(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "portucca run") {
 		t.Fatalf("stdout = %q, want run usage", out.String())
+	}
+	if !strings.Contains(out.String(), "--service") || !strings.Contains(out.String(), "exec") {
+		t.Fatalf("stdout = %q, want run flags and exec description", out.String())
 	}
 }
 

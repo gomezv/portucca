@@ -197,6 +197,9 @@ portucca run -- npm run dev
 
 ## Commands
 
+Run `portucca help <command>` or `portucca <command> --help` for the full description, flags,
+examples, and notes for each command.
+
 | Command | What it does |
 |---|---|
 | `init --project <slug> --service <name:main:start>...` | Writes `portucca.json`. Add `--preset` (`generic` or `node-vite-nest`) and `--force` to overwrite. |

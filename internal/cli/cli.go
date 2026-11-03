@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"runtime"
 	"time"
@@ -42,11 +41,33 @@ var knownCommands = map[string]bool{
 	"list":       true,
 	"run":        true,
 	"version":    true,
+	"help":       true,
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		printUsage(stdout)
+	if len(args) == 0 {
+		printGeneralHelp(stdout)
+		return 0
+	}
+	if args[0] == "help" {
+		if len(args) > 1 {
+			target := args[1]
+			if target == "--help" || target == "-h" {
+				printCommandHelp(stdout, "help")
+				return 0
+			}
+			if target == "help" || knownCommands[target] {
+				printCommandHelp(stdout, target)
+				return 0
+			}
+			writeHuman(stderr, "help", nil, apperr.New("usage", "unknown command: "+target, "run portucca help to list commands"))
+			return 2
+		}
+		printGeneralHelp(stdout)
+		return 0
+	}
+	if args[0] == "--help" || args[0] == "-h" {
+		printGeneralHelp(stdout)
 		return 0
 	}
 	cmd := args[0]
@@ -55,7 +76,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	data, jsonMode, err := execute(cmd, args[1:])
 	if errors.Is(err, errHelp) {
-		printUsage(stdout)
+		if !printCommandHelp(stdout, cmd) {
+			printGeneralHelp(stdout)
+		}
 		return 0
 	}
 	if err != nil {
@@ -84,12 +107,6 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		writeHuman(stdout, cmd, data, nil)
 	}
 	return 0
-}
-
-func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "portucca — sticky ports per worktree")
-	fmt.Fprintln(w, "usage: portucca <init|ensure|setup|reallocate|prune|doctor|env|list|run|version> [flags]")
-	fmt.Fprintln(w, "       portucca run [--service <name>] -- <command> [args...]")
 }
 
 func hasSeparator(args []string) bool {

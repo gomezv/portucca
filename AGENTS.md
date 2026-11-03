@@ -4,7 +4,7 @@ Rules for working in this repository.
 
 ## Code rules
 
-- Code and identifiers in English; documentation in English.
+- Code and identifiers in English; documentation and user-facing CLI output in English.
 - Go 1.27 or later. The module lives at the repository root (`go.mod`) and produces a single
   binary.
 - Standard library first; no third-party dependencies in v1 unless justified with evidence.

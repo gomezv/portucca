@@ -57,8 +57,8 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config) (EnsureResult, 
 	if own != nil && own.Project != cfg.Project {
 		return EnsureResult{}, apperr.New(
 			"claim_project_mismatch",
-			fmt.Sprintf("el claim de %s pertenece al proyecto %q, no a %q", c.Root, own.Project, cfg.Project),
-			"revisa el registro con portucca doctor y corrige o elimina el claim",
+			fmt.Sprintf("the claim for %s belongs to project %q, not %q", c.Root, own.Project, cfg.Project),
+			"check the registry with portucca doctor and fix or remove the claim",
 		)
 	}
 	existing := map[domain.ServiceName]domain.ServiceClaim{}
@@ -81,7 +81,7 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config) (EnsureResult, 
 	}
 	envChanged, err := a.EnvStore.WriteValues(c.Root, desiredValues(cfg, res.Services))
 	if err != nil {
-		return EnsureResult{}, apperr.New("env_write", err.Error(), "revisa los permisos de los archivos de entorno")
+		return EnsureResult{}, apperr.New("env_write", err.Error(), "check the env file permissions")
 	}
 	changed := res.Changed || envChanged || len(removed) > 0 || own == nil || claimDiffers(own, res.Services)
 	if changed {
@@ -101,9 +101,9 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config) (EnsureResult, 
 func mapProjectErr(err error) error {
 	switch {
 	case errorsIs(err, project.ErrNotRepo):
-		return apperr.New("not_a_repo", err.Error(), "ejecuta portucca dentro de un repositorio git")
+		return apperr.New("not_a_repo", err.Error(), "run portucca inside a git repository")
 	case errorsIs(err, project.ErrGitMissing):
-		return apperr.New("git_missing", err.Error(), "instala git y vuelve a intentar")
+		return apperr.New("git_missing", err.Error(), "install git and retry")
 	default:
 		return apperr.New("internal", err.Error(), "")
 	}
@@ -113,20 +113,20 @@ func mapConfigErr(err error) error {
 	text := err.Error()
 	switch {
 	case contains(text, "config_missing"):
-		return apperr.New("config_missing", text, "ejecuta portucca init")
+		return apperr.New("config_missing", text, "run portucca init")
 	case contains(text, "config_version"):
-		return apperr.New("config_version", text, "actualiza portucca o corrige la versión")
+		return apperr.New("config_version", text, "upgrade portucca or fix the version")
 	default:
-		return apperr.New("config_invalid", text, "revisa portucca.json")
+		return apperr.New("config_invalid", text, "check portucca.json")
 	}
 }
 
 func mapLockErr(err error) error {
 	if errorsIs(err, platform.ErrLockTimeout) {
-		return apperr.New("lock_timeout", err.Error(), "otro proceso portucca está trabajando; reintenta")
+		return apperr.New("lock_timeout", err.Error(), "another portucca process is working; retry")
 	}
 	if errorsIs(err, platform.ErrUnsupported) {
-		return apperr.New("unsupported_platform", err.Error(), "esta plataforma todavía no está soportada")
+		return apperr.New("unsupported_platform", err.Error(), "this platform is not supported yet")
 	}
 	return apperr.New("internal", err.Error(), "")
 }
@@ -134,9 +134,9 @@ func mapLockErr(err error) error {
 func mapRegistryErr(err error) error {
 	switch {
 	case errorsIs(err, registry.ErrCorrupt):
-		return apperr.New("registry_corrupt", err.Error(), "mueve el registro a un lado y vuelve a intentar")
+		return apperr.New("registry_corrupt", err.Error(), "move the registry aside and retry")
 	case errorsIs(err, registry.ErrVersion):
-		return apperr.New("registry_version", err.Error(), "actualiza portucca o corrige el registro")
+		return apperr.New("registry_version", err.Error(), "upgrade portucca or fix the registry")
 	default:
 		return apperr.New("internal", err.Error(), "")
 	}
@@ -145,19 +145,19 @@ func mapRegistryErr(err error) error {
 func mapAllocErr(err error) error {
 	var exhausted *allocation.PortExhaustedError
 	if errorsAs(err, &exhausted) {
-		return apperr.New("port_exhausted", err.Error(), "amplía la banda del proyecto o libera puertos")
+		return apperr.New("port_exhausted", err.Error(), "widen the project band or free ports")
 	}
 	var duplicate *allocation.DuplicateClaimError
 	if errorsAs(err, &duplicate) {
-		return apperr.New("duplicate_claim", err.Error(), "revisa el registro con portucca doctor")
+		return apperr.New("duplicate_claim", err.Error(), "check the registry with portucca doctor")
 	}
 	var adoption *allocation.AdoptionConflictError
 	if errorsAs(err, &adoption) {
-		return apperr.New("adoption_conflict", err.Error(), "corrige los puertos existentes en los archivos de entorno")
+		return apperr.New("adoption_conflict", err.Error(), "fix the existing ports in the env files")
 	}
 	var outOfBand *allocation.OutOfBandError
 	if errorsAs(err, &outOfBand) {
-		return apperr.New("claim_out_of_band", err.Error(), "ejecuta portucca reallocate")
+		return apperr.New("claim_out_of_band", err.Error(), "run portucca reallocate")
 	}
 	return apperr.New("internal", err.Error(), "")
 }
@@ -165,10 +165,10 @@ func mapAllocErr(err error) error {
 func mapEnvErr(err error) error {
 	switch {
 	case errorsIs(err, envfile.ErrSourceMissing):
-		return apperr.New("bootstrap_source_missing", err.Error(), "corrige bootstrap.copyFromMain")
+		return apperr.New("bootstrap_source_missing", err.Error(), "fix bootstrap.copyFromMain")
 	case errorsIs(err, envfile.ErrSymlinkConflict):
-		return apperr.New("symlink_conflict", err.Error(), "revisa el archivo o symlink existente")
+		return apperr.New("symlink_conflict", err.Error(), "check the existing file or symlink")
 	default:
-		return apperr.New("bootstrap_error", err.Error(), "revisa bootstrap y los permisos")
+		return apperr.New("bootstrap_error", err.Error(), "check bootstrap and permissions")
 	}
 }

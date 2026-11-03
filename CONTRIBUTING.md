@@ -11,7 +11,7 @@ Thanks for your interest in portucca. Issues and pull requests are welcome.
 
 ## Project rules
 
-- Code and identifiers in English; documentation in English.
+- Code and identifiers in English; documentation and user-facing CLI output in English.
 - Go 1.27 or later; a single module at the repository root.
 - Standard library first; no third-party dependencies in v1 unless justified with evidence.
 - Linux and macOS in v1; Windows compiles but fails with `unsupported_platform`.

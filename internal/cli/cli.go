@@ -123,7 +123,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil, g.json, errHelp
 		}
-		return nil, g.json, apperr.New("usage", err.Error(), "revisa las flags")
+		return nil, g.json, apperr.New("usage", err.Error(), "check the flags")
 	}
 	if !knownCommands[cmd] {
 		return nil, g.json, apperr.New("usage", "unknown command: "+cmd, "")
@@ -138,7 +138,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 		return nil, g.json, apperr.New("usage", "--project and at least one --service are required", "")
 	}
 	if err := platform.Check(); err != nil {
-		return nil, g.json, apperr.New("unsupported_platform", err.Error(), "esta plataforma todavía no está soportada")
+		return nil, g.json, apperr.New("unsupported_platform", err.Error(), "this platform is not supported yet")
 	}
 	if cmd == "version" {
 		return versionInfo{
@@ -152,7 +152,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 	if regPath == "" {
 		p, err := registry.DefaultPath()
 		if err != nil {
-			return nil, g.json, apperr.New("internal", err.Error(), "define HOME o usa --registry")
+			return nil, g.json, apperr.New("internal", err.Error(), "set HOME or use --registry")
 		}
 		regPath = p
 	}

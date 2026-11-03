@@ -39,7 +39,7 @@ func (a *App) Env(ctx context.Context, worktree string) (EnvResult, error) {
 	}
 	own := findClaim(reg, c.Root)
 	if own == nil {
-		return EnvResult{}, apperr.New("no_claim", "este worktree no tiene claim", "ejecuta primero portucca ensure")
+		return EnvResult{}, apperr.New("no_claim", "this worktree has no claim", "run portucca ensure first")
 	}
 	return EnvResult{Project: cfg.Project, WorktreePath: c.Root, Services: own.Services, Env: desiredEnv(c.Root, cfg, own.Services)}, nil
 }

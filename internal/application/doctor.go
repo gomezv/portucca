@@ -101,7 +101,7 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 		dc := DoctorClaim{Project: claim.Project, Path: claim.Path, Services: claim.Services, Issues: []Issue{}}
 		if _, err := os.Stat(claim.Path); errors.Is(err, fs.ErrNotExist) {
 			dc.Live = false
-			dc.Issues = append(dc.Issues, Issue{Code: "stale_claim", Message: "el worktree no existe"})
+			dc.Issues = append(dc.Issues, Issue{Code: "stale_claim", Message: "the worktree does not exist"})
 		} else {
 			dc.Live = true
 			claimCfg, _, cfgErr := a.Config.LoadRoot(claim.Path)
@@ -110,24 +110,24 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 			}
 			for name, sc := range claim.Services {
 				if other, ok := byPort[sc.Port]; ok && other != claim.Path {
-					result.Errors = append(result.Errors, Issue{Code: "duplicate_claim", Message: fmt.Sprintf("puerto %d reclamado por %s y %s", sc.Port, other, claim.Path)})
+					result.Errors = append(result.Errors, Issue{Code: "duplicate_claim", Message: fmt.Sprintf("port %d is claimed by %s and %s", sc.Port, other, claim.Path)})
 					result.OK = false
 				}
 				byPort[sc.Port] = claim.Path
 				if a.Prober != nil && !a.Prober.IsFree(sc.Port) && claim.Path != c.Root {
-					result.Warnings = append(result.Warnings, Issue{Code: "port_busy", Message: fmt.Sprintf("puerto %d ocupado en %s", sc.Port, claim.Path)})
+					result.Warnings = append(result.Warnings, Issue{Code: "port_busy", Message: fmt.Sprintf("port %d is busy in %s", sc.Port, claim.Path)})
 				}
 				if cfgErr == nil {
 					if claimCfg.Project != claim.Project {
-						dc.Issues = append(dc.Issues, Issue{Code: "claim_project_mismatch", Message: "el proyecto del claim no coincide con portucca.json"})
+						dc.Issues = append(dc.Issues, Issue{Code: "claim_project_mismatch", Message: "the claim project does not match portucca.json"})
 					}
 					svc, ok := claimCfg.Services[name]
 					if !ok || sc.Port < svc.StartPort {
-						dc.Issues = append(dc.Issues, Issue{Code: "claim_out_of_band", Message: "el puerto quedó fuera de la banda"})
+						dc.Issues = append(dc.Issues, Issue{Code: "claim_out_of_band", Message: "the port is outside the band"})
 					}
 					for _, mainSvc := range claimCfg.Services {
 						if sc.Port == mainSvc.MainPort {
-							dc.Issues = append(dc.Issues, Issue{Code: "main_port_claimed", Message: "el claim usa un puerto reservado del main"})
+							dc.Issues = append(dc.Issues, Issue{Code: "main_port_claimed", Message: "the claim uses a port reserved for the main checkout"})
 							break
 						}
 					}
@@ -143,7 +143,7 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 	if haveConfig && a.Prober != nil {
 		for _, svc := range cfg.Services {
 			if !a.Prober.IsFree(svc.MainPort) {
-				result.Warnings = append(result.Warnings, Issue{Code: "port_busy", Message: fmt.Sprintf("puerto reservado %d ocupado", svc.MainPort)})
+				result.Warnings = append(result.Warnings, Issue{Code: "port_busy", Message: fmt.Sprintf("reserved port %d is busy", svc.MainPort)})
 			}
 		}
 	}

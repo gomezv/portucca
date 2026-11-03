@@ -207,7 +207,7 @@ func TestReallocateRequiresClaim(t *testing.T) {
 		t.Fatal("expected no_claim")
 	}
 	e, ok := apperr.As(err)
-	if !ok || e.Code != "no_claim" || e.Hint != "ejecuta primero portucca ensure" {
+	if !ok || e.Code != "no_claim" || e.Hint != "run portucca ensure first" {
 		t.Fatalf("err = %+v", e)
 	}
 	if reg.saves != 0 || len(env.files) != 0 {

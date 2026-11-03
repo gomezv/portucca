@@ -42,10 +42,10 @@ func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
 	if req.ConfigPath != "" {
 		abs, err := filepath.Abs(req.ConfigPath)
 		if err != nil {
-			return InitResult{}, apperr.New("config_invalid", err.Error(), "revisa --config")
+			return InitResult{}, apperr.New("config_invalid", err.Error(), "check --config")
 		}
 		if filepath.Dir(abs) != c.Root {
-			return InitResult{}, apperr.New("usage", "--config must live at the repo root", "usa la raíz del repo")
+			return InitResult{}, apperr.New("usage", "--config must live at the repo root", "use the repository root")
 		}
 		path = abs
 	}
@@ -53,7 +53,7 @@ func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
 	for _, spec := range req.Services {
 		name, main, start, err := parseServiceSpec(spec)
 		if err != nil {
-			return InitResult{}, apperr.New("usage", err.Error(), "usa --service nombre:main:start")
+			return InitResult{}, apperr.New("usage", err.Error(), "use --service name:main:start")
 		}
 		services[name] = domain.Service{MainPort: main, StartPort: start}
 	}
@@ -63,10 +63,10 @@ func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
 	}
 	cfg, err := config.ApplyPreset(preset, domain.Project(req.Project), services)
 	if err != nil {
-		return InitResult{}, apperr.New("usage", err.Error(), "revisa --project, --service y --preset")
+		return InitResult{}, apperr.New("usage", err.Error(), "check --project, --service, and --preset")
 	}
 	if _, err := os.Stat(path); err == nil && !req.Force {
-		return InitResult{}, apperr.New("config_exists", "portucca.json ya existe", "usa --force para sobrescribirlo")
+		return InitResult{}, apperr.New("config_exists", "portucca.json already exists", "use --force to overwrite it")
 	}
 	warning := ""
 	if a.Registry != nil && a.Locker != nil {
@@ -74,7 +74,7 @@ func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
 			if reg, err := a.Registry.Load(); err == nil {
 				for _, claim := range reg.Worktrees {
 					if claim.Project == cfg.Project && claim.Path != c.Root {
-						warning = fmt.Sprintf("el proyecto %q ya tiene claims en %s", cfg.Project, claim.Path)
+						warning = fmt.Sprintf("project %q already has claims in %s", cfg.Project, claim.Path)
 						break
 					}
 				}
@@ -83,7 +83,7 @@ func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
 		}
 	}
 	if err := config.WriteFile(path, cfg); err != nil {
-		return InitResult{}, apperr.New("config_invalid", err.Error(), "revisa los permisos")
+		return InitResult{}, apperr.New("config_invalid", err.Error(), "check permissions")
 	}
 	return InitResult{ConfigPath: path, Project: cfg.Project, Services: cfg.Services, Warning: warning}, nil
 }

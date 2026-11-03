@@ -10,6 +10,7 @@ import (
 
 	"github.com/gomezv/portucca/internal/domain"
 	"github.com/gomezv/portucca/internal/envfile"
+	"github.com/gomezv/portucca/internal/project"
 )
 
 type EnvValue struct {
@@ -148,6 +149,19 @@ func (a *App) loadConfig(root string) (domain.Config, string, error) {
 	}
 	cfg, err := a.Config.LoadFile(abs)
 	return cfg, abs, err
+}
+
+// loadConfigFor loads the worktree config. When the worktree has no config and is not the
+// main checkout, it falls back to the main checkout's config, enabling a shared local config.
+func (a *App) loadConfigFor(c project.Context) (domain.Config, string, error) {
+	if a.ConfigFile != "" {
+		return a.loadConfig(c.Root)
+	}
+	cfg, path, err := a.Config.LoadRoot(c.Root)
+	if err == nil || c.IsMain || !errors.Is(err, fs.ErrNotExist) {
+		return cfg, path, err
+	}
+	return a.Config.LoadRoot(c.MainRoot)
 }
 
 func errorsIs(err, target error) bool     { return errors.Is(err, target) }

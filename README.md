@@ -295,6 +295,16 @@ A complete `portucca.json`:
 
 Commit `portucca.json` once; worktrees created from that branch read the same file.
 
+### Shared local config
+
+If you do not want to version `portucca.json`, create it once in the main checkout and add it
+to `.gitignore`. Worktrees without their own `portucca.json` use the main checkout's config
+automatically; a worktree-local `portucca.json` takes precedence. `portucca setup --json` and
+`portucca doctor --json` report the config path in `configPath` and `config.path`.
+
+The file is still local state: a fresh clone on another machine needs its own copy. Commit it
+when you want the config to travel with the repository.
+
 ## Troubleshooting
 
 Start with the read-only diagnostic from the worktree you are debugging:

@@ -14,7 +14,7 @@ func (a *App) Reallocate(ctx context.Context, worktree string) (EnsureResult, er
 	if err != nil {
 		return EnsureResult{}, mapProjectErr(err)
 	}
-	cfg, _, err := a.loadConfig(c.Root)
+	cfg, _, err := a.loadConfigFor(c)
 	if err != nil {
 		return EnsureResult{}, mapConfigErr(err)
 	}

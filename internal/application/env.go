@@ -20,7 +20,7 @@ func (a *App) Env(ctx context.Context, worktree string) (EnvResult, error) {
 	if err != nil {
 		return EnvResult{}, mapProjectErr(err)
 	}
-	cfg, _, err := a.loadConfig(c.Root)
+	cfg, _, err := a.loadConfigFor(c)
 	if err != nil {
 		return EnvResult{}, mapConfigErr(err)
 	}

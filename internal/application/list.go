@@ -29,7 +29,7 @@ func (a *App) List(ctx context.Context, worktree, project string, all bool) (Lis
 	defer unlock()
 	if !all && project == "" && a.Locator != nil && a.Config != nil {
 		if c, err := a.Locator.Detect(worktree); err == nil {
-			if cfg, _, err := a.loadConfig(c.Root); err == nil {
+			if cfg, _, err := a.loadConfigFor(c); err == nil {
 				project = string(cfg.Project)
 			}
 		}

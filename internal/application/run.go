@@ -37,7 +37,7 @@ func (a *App) PrepareRun(ctx context.Context, req RunRequest) (RunPlan, error) {
 	if err != nil {
 		return RunPlan{}, mapProjectErr(err)
 	}
-	cfg, _, err := a.loadConfig(c.Root)
+	cfg, _, err := a.loadConfigFor(c)
 	if err != nil {
 		return RunPlan{}, mapConfigErr(err)
 	}

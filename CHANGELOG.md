@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   description, usage, flags, examples, and notes for each command.
 - `next` preset: `portucca init --preset next --service web:3000:3001` writes `PORT` and
   `NEXT_PUBLIC_URL` to `.env` and copies `.env` from the main checkout.
+- Shared local config: a worktree without `portucca.json` falls back to the main checkout's
+  config, so an unversioned, gitignored config can be shared across worktrees. A
+  worktree-local `portucca.json` still takes precedence.
 - `portucca run -- <command>` injects the resolved ports and environment into the command
   process, so frameworks that read the port from the process environment need no wrapper.
 - Sticky port allocation per worktree, backed by a global claims registry locked with `flock`.

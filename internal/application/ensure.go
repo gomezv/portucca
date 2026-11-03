@@ -17,6 +17,7 @@ import (
 type EnsureResult struct {
 	Project      domain.Project                             `json:"project"`
 	WorktreePath string                                     `json:"worktreePath"`
+	ConfigPath   string                                     `json:"configPath"`
 	IsMain       bool                                       `json:"isMain"`
 	Changed      bool                                       `json:"changed"`
 	Services     map[domain.ServiceName]domain.ServiceClaim `json:"services"`
@@ -28,14 +29,14 @@ func (a *App) Ensure(ctx context.Context, worktree string) (EnsureResult, error)
 	if err != nil {
 		return EnsureResult{}, mapProjectErr(err)
 	}
-	cfg, _, err := a.loadConfig(c.Root)
+	cfg, cfgPath, err := a.loadConfigFor(c)
 	if err != nil {
 		return EnsureResult{}, mapConfigErr(err)
 	}
 	if c.IsMain {
 		services := mainServices(cfg)
 		return EnsureResult{
-			Project: cfg.Project, WorktreePath: c.Root, IsMain: true,
+			Project: cfg.Project, WorktreePath: c.Root, ConfigPath: cfgPath, IsMain: true,
 			Services: services, Env: desiredEnv(c.Root, cfg, services),
 		}, nil
 	}
@@ -44,10 +45,10 @@ func (a *App) Ensure(ctx context.Context, worktree string) (EnsureResult, error)
 		return EnsureResult{}, mapLockErr(err)
 	}
 	defer unlock()
-	return a.ensureLocked(c, cfg)
+	return a.ensureLocked(c, cfg, cfgPath)
 }
 
-func (a *App) ensureLocked(c project.Context, cfg domain.Config) (EnsureResult, error) {
+func (a *App) ensureLocked(c project.Context, cfg domain.Config, cfgPath string) (EnsureResult, error) {
 	reg, err := a.Registry.Load()
 	if err != nil {
 		return EnsureResult{}, mapRegistryErr(err)
@@ -93,7 +94,7 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config) (EnsureResult, 
 		}
 	}
 	return EnsureResult{
-		Project: cfg.Project, WorktreePath: c.Root, Changed: changed,
+		Project: cfg.Project, WorktreePath: c.Root, ConfigPath: cfgPath, Changed: changed,
 		Services: res.Services, Env: desiredEnv(c.Root, cfg, res.Services),
 	}, nil
 }
@@ -113,7 +114,7 @@ func mapConfigErr(err error) error {
 	text := err.Error()
 	switch {
 	case contains(text, "config_missing"):
-		return apperr.New("config_missing", text, "run portucca init")
+		return apperr.New("config_missing", text, "run portucca init in the main checkout or add portucca.json")
 	case contains(text, "config_version"):
 		return apperr.New("config_version", text, "upgrade portucca or fix the version")
 	default:

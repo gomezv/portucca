@@ -43,6 +43,7 @@ type DoctorService struct {
 
 type DoctorConfig struct {
 	Valid    bool                                 `json:"valid"`
+	Path     string                               `json:"path,omitempty"`
 	Version  int                                  `json:"version,omitempty"`
 	Services map[domain.ServiceName]DoctorService `json:"services,omitempty"`
 }
@@ -86,14 +87,15 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 	if detectErr != nil {
 		result.Warnings = append(result.Warnings, projectIssue(detectErr))
 	} else {
-		loaded, _, loadErr := a.loadConfig(c.Root)
+		loaded, cfgPath, loadErr := a.loadConfigFor(c)
+		result.Config.Path = cfgPath
 		if loadErr != nil {
 			result.Errors = append(result.Errors, configIssue(loadErr))
 			result.OK = false
 		} else {
 			cfg, haveConfig = loaded, true
 			result.Project = cfg.Project
-			result.Config = doctorConfig(cfg)
+			result.Config = doctorConfig(cfg, cfgPath)
 		}
 	}
 	byPort := map[domain.Port]string{}
@@ -104,7 +106,13 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 			dc.Issues = append(dc.Issues, Issue{Code: "stale_claim", Message: "the worktree does not exist"})
 		} else {
 			dc.Live = true
-			claimCfg, _, cfgErr := a.Config.LoadRoot(claim.Path)
+			var claimCfg domain.Config
+			var cfgErr error
+			if claimCtx, claimDetectErr := a.Locator.Detect(claim.Path); claimDetectErr == nil {
+				claimCfg, _, cfgErr = a.loadConfigFor(claimCtx)
+			} else {
+				claimCfg, _, cfgErr = a.Config.LoadRoot(claim.Path)
+			}
 			if cfgErr != nil {
 				result.Warnings = append(result.Warnings, configIssue(cfgErr))
 			}
@@ -210,12 +218,12 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 	return result, nil
 }
 
-func doctorConfig(cfg domain.Config) DoctorConfig {
+func doctorConfig(cfg domain.Config, path string) DoctorConfig {
 	services := make(map[domain.ServiceName]DoctorService, len(cfg.Services))
 	for name, svc := range cfg.Services {
 		services[name] = DoctorService{MainPort: svc.MainPort, StartPort: svc.StartPort}
 	}
-	return DoctorConfig{Valid: true, Version: cfg.Version, Services: services}
+	return DoctorConfig{Valid: true, Path: path, Version: cfg.Version, Services: services}
 }
 
 func projectIssue(err error) Issue {

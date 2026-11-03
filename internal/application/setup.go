@@ -20,7 +20,7 @@ func (a *App) Setup(ctx context.Context, worktree string) (SetupResult, error) {
 	if err != nil {
 		return SetupResult{}, mapProjectErr(err)
 	}
-	cfg, _, err := a.loadConfig(c.Root)
+	cfg, cfgPath, err := a.loadConfigFor(c)
 	if err != nil {
 		return SetupResult{}, mapConfigErr(err)
 	}
@@ -62,7 +62,7 @@ func (a *App) Setup(ctx context.Context, worktree string) (SetupResult, error) {
 			boot.Skipped = append(boot.Skipped, link.Path)
 		}
 	}
-	ensure, err := a.ensureLocked(c, cfg)
+	ensure, err := a.ensureLocked(c, cfg, cfgPath)
 	if err != nil {
 		return SetupResult{}, err
 	}

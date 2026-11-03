@@ -80,6 +80,9 @@ Notes:
     bootstrap for apps/web, apps/api and .env.
   - The next preset expects one service named web and fills PORT and
     NEXT_PUBLIC_URL in .env, copying .env from the main checkout.
+  - A worktree without portucca.json uses the main checkout's config; a
+    worktree-local config overrides it. Run init in the main checkout to share
+    a local, gitignored config.
 `,
 	"ensure": `portucca ensure — assign or reuse the worktree ports
 

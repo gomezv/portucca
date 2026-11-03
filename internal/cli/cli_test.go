@@ -313,6 +313,15 @@ func TestPrintEnsureSortsServices(t *testing.T) {
 	}
 }
 
+func TestHasSeparator(t *testing.T) {
+	if !hasSeparator([]string{"--service", "web", "--", "npm", "run", "dev"}) {
+		t.Fatal("expected separator")
+	}
+	if hasSeparator([]string{"npm", "run", "dev"}) {
+		t.Fatal("unexpected separator")
+	}
+}
+
 func newGitWorktree(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

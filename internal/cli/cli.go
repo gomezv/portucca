@@ -13,6 +13,7 @@ import (
 	"github.com/gomezv/portucca/internal/application"
 	"github.com/gomezv/portucca/internal/buildinfo"
 	"github.com/gomezv/portucca/internal/config"
+	"github.com/gomezv/portucca/internal/domain"
 	"github.com/gomezv/portucca/internal/envfile"
 	"github.com/gomezv/portucca/internal/netprobe"
 	"github.com/gomezv/portucca/internal/platform"
@@ -39,6 +40,7 @@ var knownCommands = map[string]bool{
 	"doctor":     true,
 	"env":        true,
 	"list":       true,
+	"run":        true,
 	"version":    true,
 }
 
@@ -86,7 +88,17 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "portucca — sticky ports per worktree")
-	fmt.Fprintln(w, "usage: portucca <init|ensure|setup|reallocate|prune|doctor|env|list|version> [flags]")
+	fmt.Fprintln(w, "usage: portucca <init|ensure|setup|reallocate|prune|doctor|env|list|run|version> [flags]")
+	fmt.Fprintln(w, "       portucca run [--service <name>] -- <command> [args...]")
+}
+
+func hasSeparator(args []string) bool {
+	for _, arg := range args {
+		if arg == "--" {
+			return true
+		}
+	}
+	return false
 }
 
 func execute(cmd string, args []string) (any, bool, error) {
@@ -104,10 +116,13 @@ func execute(cmd string, args []string) (any, bool, error) {
 	var initPreset string
 	var initForce bool
 	var services stringList
+	var runService string
 	switch cmd {
 	case "list":
 		fs.BoolVar(&all, "all", false, "")
 		fs.StringVar(&projectFlag, "project", "", "")
+	case "run":
+		fs.StringVar(&runService, "service", "", "")
 	case "init":
 		fs.StringVar(&initProject, "project", "", "")
 		fs.StringVar(&initPreset, "preset", "", "")
@@ -119,6 +134,9 @@ func execute(cmd string, args []string) (any, bool, error) {
 	default:
 		// ensure, setup, reallocate, prune, doctor, env use only global flags.
 	}
+	if cmd == "run" && !hasSeparator(args) {
+		return nil, false, apperr.New("usage", "run: missing -- before the command", "use -- <command> [args...]")
+	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil, g.json, errHelp
@@ -128,7 +146,14 @@ func execute(cmd string, args []string) (any, bool, error) {
 	if !knownCommands[cmd] {
 		return nil, g.json, apperr.New("usage", "unknown command: "+cmd, "")
 	}
-	if fs.NArg() > 0 {
+	if cmd == "run" {
+		if g.json {
+			return nil, false, apperr.New("usage", "run does not support --json", "")
+		}
+		if fs.NArg() == 0 {
+			return nil, false, apperr.New("usage", "run: missing command", "use -- <command> [args...]")
+		}
+	} else if fs.NArg() > 0 {
 		return nil, g.json, apperr.New("usage", "unexpected argument: "+fs.Arg(0), "")
 	}
 	if cmd == "list" && all && projectFlag != "" {
@@ -196,6 +221,13 @@ func execute(cmd string, args []string) (any, bool, error) {
 			Worktree: g.worktree, ConfigPath: g.config,
 		})
 		return data, g.json, err
+	case "run":
+		err := app.Run(ctx, application.RunRequest{
+			Worktree: g.worktree,
+			Service:  domain.ServiceName(runService),
+			Command:  fs.Args(),
+		})
+		return nil, g.json, err
 	}
 	return nil, g.json, apperr.New("usage", "unknown command: "+cmd, "")
 }

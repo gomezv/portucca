@@ -19,6 +19,11 @@ Thanks for your interest in portucca. Issues and pull requests are welcome.
 - Conventional commits, with no AI attribution.
 - Update `CHANGELOG.md` under `[Unreleased]` for user-visible changes.
 
+## Scope
+
+- Portucca does not create worktrees, install dependencies, run builds, or supervise processes.
+- `portucca run` only execs an explicit command with the resolved environment.
+
 ## Verification
 
 ```bash

@@ -24,11 +24,13 @@ framework nor a specific `.env` layout.
 ## What it does not solve (v1)
 
 - Databases per worktree
-- Process supervision, per-subdomain proxies, or certificates
+- Process supervision, per-subdomain proxies, or certificates: `run` execs once and exits
+  with the command's status
 - Containers / devcontainers
 - Worktree creation: `git worktree`, Orca, or another tool creates them; portucca prepares an
   existing worktree
-- Dependency installation or builds: `setup` does not run project commands
+- Dependency installation or builds: `setup` does not run project commands, and `run` does
+  not install dependencies; `run` only execs the command you pass after `--`
 - TUI and plugins (deferred to v2)
 
 ## How it works
@@ -38,7 +40,8 @@ framework nor a specific `.env` layout.
    to the git index. The file declares the project name, services, port ranges, env targets,
    and optional bootstrap files.
 2. `portucca init` writes that file. `portucca setup` prepares a worktree: it bootstraps files
-   from the main checkout and then runs `ensure`.
+   from the main checkout and then runs `ensure`. `portucca run` performs that same
+   preparation and then execs an explicit command with the resolved environment.
 3. `ensure` assigns one port per service, stores the claim in a machine-wide registry keyed by
    the worktree path, and writes the values to the configured env files. The claim survives
    restarts and is released on the next `ensure` or `prune` after the worktree directory is
@@ -121,6 +124,7 @@ this for each worktree.
 git worktree add ../app-feature -b feature
 cd ../app-feature
 portucca setup
+portucca run -- <your dev command>
 ```
 
 No commit is needed here. `portucca` reads `portucca.json` from the worktree root, writes the
@@ -146,8 +150,9 @@ portucca env --json
 portucca list
 ```
 
-`setup` does not install dependencies or run builds; start your stack with the port that
-portucca assigned.
+`setup` does not install dependencies or run builds. `run` prepares the worktree and execs
+your stack with the resolved environment; if you prefer to start it yourself, use the port
+that portucca assigned.
 
 ### Node/Vite/Nest projects
 
@@ -168,12 +173,35 @@ checkout, and writes:
 If your layout differs, use `--preset generic` and declare the `env` and `bootstrap` entries
 yourself, or edit `portucca.json` after `init`.
 
+Frameworks that read the port from the process environment start through portucca:
+
+```bash
+portucca run -- npm run dev
+```
+
+`run` performs `setup` and then execs the command with `PORT` and, when configured,
+`NEXT_PUBLIC_URL` injected into its environment. There is no intermediate shell.
+
+### Next.js
+
+`next dev` chooses its port before it loads `.env`, so a `PORT` value written by portucca is
+not enough for the server itself. Start Next through portucca:
+
+```bash
+portucca run -- npm run dev
+```
+
+`run` performs `setup` and execs the command with `PORT` and, when configured,
+`NEXT_PUBLIC_URL` injected into the process environment. If your `dev` script already passes
+`-p`, use that port.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `init --project <slug> --service <name:main:start>...` | Writes `portucca.json`. Add `--preset` (`generic` or `node-vite-nest`) and `--force` to overwrite. |
 | `setup` | Bootstraps the worktree and runs `ensure`. |
+| `run [--service <name>] -- <command> [args...]` | Bootstraps, assigns ports, and execs the command with the resolved env. Exits with the command's status. |
 | `ensure` | Assigns or reuses the worktree ports, repairs env files, and writes the registry. |
 | `reallocate` | Moves the worktree to new ports. This is the only command that changes a URL. |
 | `prune` | Removes claims for worktree directories that no longer exist. |
@@ -183,7 +211,7 @@ yourself, or edit `portucca.json` after `init`.
 | `version` | Prints version, commit, OS, architecture, and schema version. |
 
 Global flags: `--json`, `--config <path>`, `--registry <path>`, `--worktree <path>`,
-`--lock-timeout <duration>`, `--help`, and `--version`.
+`--lock-timeout <duration>`, `--help`, and `--version`. `--json` does not apply to `run`.
 
 Examples:
 
@@ -193,6 +221,7 @@ portucca reallocate --json
 portucca prune
 portucca doctor --json
 portucca list --all
+portucca run -- npm run dev
 portucca version --json
 ```
 

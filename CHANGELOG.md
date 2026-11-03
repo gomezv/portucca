@@ -9,8 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- CLI commands: `init`, `ensure`, `setup`, `reallocate`, `prune`, `doctor`, `env`, `list`, and
-  `version`.
+- CLI commands: `init`, `ensure`, `setup`, `run`, `reallocate`, `prune`, `doctor`, `env`,
+  `list`, and `version`.
+- `portucca run -- <command>` injects the resolved ports and environment into the command
+  process, so frameworks that read the port from the process environment need no wrapper.
 - Sticky port allocation per worktree, backed by a global claims registry locked with `flock`.
 - Declarative bootstrap from the main checkout with file copies and symlinks.
 - `adoptFrom` support to register existing ports without binding or restarting the stack.

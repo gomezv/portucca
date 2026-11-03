@@ -12,7 +12,7 @@ Gracias por tu interés en portucca. Los issues y los PRs son bienvenidos.
 ## Reglas del proyecto
 
 - Código e identificadores en inglés; documentación en español.
-- Go 1.23 o superior, módulo único en la raíz del repositorio.
+- Go 1.27 o superior, módulo único en la raíz del repositorio.
 - stdlib primero; cero dependencias de terceros en v1 salvo justificación con evidencia.
 - Linux y macOS en v1; Windows compila, pero falla con `unsupported_platform`.
 - Fail-fast: un conflicto de puertos falla con un mensaje accionable; nunca se reasigna en

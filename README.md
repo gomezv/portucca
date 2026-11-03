@@ -44,7 +44,7 @@ instala en `${PORTUCCA_INSTALL_DIR:-$HOME/.local/bin}`. Para fijar una versión:
 curl -fsSL https://raw.githubusercontent.com/gomezv/portucca/main/install.sh | PORTUCCA_VERSION=v0.1.0 bash
 ```
 
-Con Go 1.23 o superior también se puede instalar desde el módulo:
+Con Go 1.27 o superior también se puede instalar desde el módulo:
 
 ```bash
 go install github.com/gomezv/portucca/cmd/portucca@latest

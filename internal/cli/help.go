@@ -60,7 +60,7 @@ Usage:
 Flags:
   --project <slug>       Project slug (required; lowercase letters, digits, hyphens)
   --service <spec>       Service as name:mainPort:startPort (repeatable, required)
-  --preset <name>        generic (default) or node-vite-nest
+  --preset <name>        generic (default), node-vite-nest, or next
   --force                Overwrite an existing portucca.json
 
 What it does:
@@ -78,6 +78,8 @@ Notes:
     happens in ensure/setup based on claims and port availability.
   - The node-vite-nest preset expects the web+api layout and fills env and
     bootstrap for apps/web, apps/api and .env.
+  - The next preset expects one service named web and fills PORT and
+    NEXT_PUBLIC_URL in .env, copying .env from the main checkout.
 `,
 	"ensure": `portucca ensure — assign or reuse the worktree ports
 

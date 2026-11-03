@@ -1,0 +1,15 @@
+{
+  "services": ["web"],
+  "env": [
+    { "service": "web", "file": ".env", "key": "PORT" },
+    {
+      "service": "web",
+      "file": ".env",
+      "key": "NEXT_PUBLIC_URL",
+      "template": "http://localhost:{{port}}"
+    }
+  ],
+  "bootstrap": {
+    "copyFromMain": [".env"]
+  }
+}

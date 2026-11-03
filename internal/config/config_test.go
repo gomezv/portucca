@@ -90,3 +90,38 @@ func TestApplyPresetNodeViteNest(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestApplyPresetNext(t *testing.T) {
+	services := map[domain.ServiceName]domain.Service{
+		"web": {MainPort: 3000, StartPort: 3001},
+	}
+	cfg, err := ApplyPreset("next", "app", services)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Env) != 2 || len(cfg.Bootstrap.CopyFromMain) != 1 || len(cfg.Bootstrap.Symlinks) != 0 {
+		t.Fatalf("env=%d copy=%d symlinks=%d", len(cfg.Env), len(cfg.Bootstrap.CopyFromMain), len(cfg.Bootstrap.Symlinks))
+	}
+	if cfg.Env[0].File != ".env" || cfg.Env[0].Key != "PORT" {
+		t.Fatalf("env[0] = %+v", cfg.Env[0])
+	}
+	if cfg.Env[1].Key != "NEXT_PUBLIC_URL" || cfg.Env[1].Template != "http://localhost:{{port}}" {
+		t.Fatalf("env[1] = %+v", cfg.Env[1])
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestApplyPresetNextRequiresOnlyWeb(t *testing.T) {
+	if _, err := ApplyPreset("next", "app", map[domain.ServiceName]domain.Service{}); err == nil {
+		t.Fatal("want an error for a missing web service")
+	}
+	services := map[domain.ServiceName]domain.Service{
+		"web": {MainPort: 3000, StartPort: 3001},
+		"api": {MainPort: 3004, StartPort: 3005},
+	}
+	if _, err := ApplyPreset("next", "app", services); err == nil {
+		t.Fatal("want an error for an extra api service")
+	}
+}

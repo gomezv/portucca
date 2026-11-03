@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `list`, `version`, and `help`.
 - Per-command help: `portucca help <command>` and `portucca <command> --help` include the
   description, usage, flags, examples, and notes for each command.
+- `next` preset: `portucca init --preset next --service web:3000:3001` writes `PORT` and
+  `NEXT_PUBLIC_URL` to `.env` and copies `.env` from the main checkout.
 - `portucca run -- <command>` injects the resolved ports and environment into the command
   process, so frameworks that read the port from the process environment need no wrapper.
 - Sticky port allocation per worktree, backed by a global claims registry locked with `flock`.

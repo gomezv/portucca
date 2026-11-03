@@ -315,7 +315,7 @@ func TestCommandHelpSpecifics(t *testing.T) {
 		cmd  string
 		want []string
 	}{
-		{"init", []string{"--project", "--service", "--preset", "--force"}},
+		{"init", []string{"--project", "--service", "--preset", "node-vite-nest", "next", "--force"}},
 		{"list", []string{"--all", "--project"}},
 		{"run", []string{"--service", "exec", "--json is not supported"}},
 		{"doctor", []string{"Exits 1"}},

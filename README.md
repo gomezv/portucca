@@ -184,6 +184,14 @@ portucca run -- npm run dev
 
 ### Next.js
 
+For a single Next.js app, use the `next` preset:
+
+```bash
+portucca init --project app --preset next --service web:3000:3001
+```
+
+It writes `PORT` and `NEXT_PUBLIC_URL` to `.env` and copies `.env` from the main checkout.
+
 `next dev` chooses its port before it loads `.env`, so a `PORT` value written by portucca is
 not enough for the server itself. Start Next through portucca:
 
@@ -202,7 +210,7 @@ examples, and notes for each command.
 
 | Command | What it does |
 |---|---|
-| `init --project <slug> --service <name:main:start>...` | Writes `portucca.json`. Add `--preset` (`generic` or `node-vite-nest`) and `--force` to overwrite. |
+| `init --project <slug> --service <name:main:start>...` | Writes `portucca.json`. Add `--preset` (`generic`, `node-vite-nest`, or `next`) and `--force` to overwrite. |
 | `setup` | Bootstraps the worktree and runs `ensure`. |
 | `run [--service <name>] -- <command> [args...]` | Bootstraps, assigns ports, and execs the command with the resolved env. Exits with the command's status. |
 | `ensure` | Assigns or reuses the worktree ports, repairs env files, and writes the registry. |

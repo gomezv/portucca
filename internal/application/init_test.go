@@ -201,6 +201,31 @@ func TestInitNodeViteNestPresetFillsEnvAndBootstrap(t *testing.T) {
 	}
 }
 
+func TestInitNextPresetFillsEnvAndBootstrap(t *testing.T) {
+	dir := t.TempDir()
+	app := &App{
+		Locator:  fakeLocator{ctx: project.Context{Root: dir}},
+		Config:   config.Loader{},
+		Registry: &fakeRegistry{reg: domain.Registry{Version: 1}},
+		Locker:   fakeLocker{},
+	}
+	if _, err := app.Init(context.Background(), InitRequest{
+		Project:  "app",
+		Services: []string{"web:3000:3001"},
+		Preset:   "next",
+		Worktree: dir,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadFile(filepath.Join(dir, "portucca.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Env) != 2 || len(cfg.Bootstrap.CopyFromMain) != 1 || len(cfg.Bootstrap.Symlinks) != 0 {
+		t.Fatalf("env=%d copy=%d symlinks=%d", len(cfg.Env), len(cfg.Bootstrap.CopyFromMain), len(cfg.Bootstrap.Symlinks))
+	}
+}
+
 func TestInitRejectsNodeViteNestWithoutRequiredServices(t *testing.T) {
 	dir := t.TempDir()
 	app := &App{

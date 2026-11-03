@@ -163,6 +163,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 		Locker:      platform.Locker{},
 		Prober:      netprobe.Prober{},
 		EnvStore:    envfile.Store{},
+		Executor:    platform.Executor{},
 		ConfigFile:  g.config,
 		LockTimeout: g.lockTimeout,
 	}

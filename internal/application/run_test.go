@@ -7,8 +7,11 @@ import (
 
 	"github.com/gomezv/portucca/internal/apperr"
 	"github.com/gomezv/portucca/internal/domain"
+	"github.com/gomezv/portucca/internal/platform"
 	"github.com/gomezv/portucca/internal/project"
 )
+
+var _ Executor = platform.Executor{}
 
 func runEnvFixture() (domain.Config, map[domain.ServiceName]domain.ServiceClaim) {
 	cfg := domain.Config{Version: 1, Project: "app", Env: []domain.EnvTarget{

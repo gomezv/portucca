@@ -1,30 +1,30 @@
-# Contribuir
+# Contributing
 
-Gracias por tu interés en portucca. Los issues y los PRs son bienvenidos.
+Thanks for your interest in portucca. Issues and pull requests are welcome.
 
-## Proceso
+## Process
 
-1. Abre un issue para reportar un bug o proponer un cambio.
-2. Haz un fork y una rama desde `main`.
-3. Envía un PR con tests.
-4. Los cambios aceptados se integran en la siguiente release.
+1. Open an issue to report a bug or propose a change.
+2. Fork the repository and create a branch from `main`.
+3. Submit a pull request with tests.
+4. Accepted changes ship in the next release.
 
-## Reglas del proyecto
+## Project rules
 
-- Código e identificadores en inglés; documentación en español.
-- Go 1.27 o superior, módulo único en la raíz del repositorio.
-- stdlib primero; cero dependencias de terceros en v1 salvo justificación con evidencia.
-- Linux y macOS en v1; Windows compila, pero falla con `unsupported_platform`.
-- Fail-fast: un conflicto de puertos falla con un mensaje accionable; nunca se reasigna en
-  silencio.
-- Commits convencionales, sin atribución de IA.
+- Code and identifiers in English; documentation in English.
+- Go 1.27 or later; a single module at the repository root.
+- Standard library first; no third-party dependencies in v1 unless justified with evidence.
+- Linux and macOS in v1; Windows compiles but fails with `unsupported_platform`.
+- Fail-fast: a port conflict fails with an actionable message; it is never reassigned silently.
+- Conventional commits, with no AI attribution.
+- Update `CHANGELOG.md` under `[Unreleased]` for user-visible changes.
 
-## Verificación
+## Verification
 
 ```bash
 go test -race ./...
 go vet ./...
-staticcheck ./...      # si está instalado
+staticcheck ./...      # when installed
 ```
 
-Antes de abrir el PR, comprueba también que `gofmt -l .` no devuelve archivos.
+Before opening a pull request, also make sure `gofmt -l .` returns no files.

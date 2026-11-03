@@ -1,24 +1,23 @@
 # AGENTS.md — portucca
 
-Reglas para trabajar en este repositorio.
+Rules for working in this repository.
 
-## Reglas del código
+## Code rules
 
-- Código e identificadores en inglés; documentación en español.
-- Go 1.27 o superior. El módulo vive en la raíz del repositorio (`go.mod`) y produce un
-  binario único.
-- stdlib primero; cero dependencias de terceros en v1 salvo justificación con evidencia.
-- `gofmt`, `go vet` y `staticcheck` limpios antes de commitear.
+- Code and identifiers in English; documentation in English.
+- Go 1.27 or later. The module lives at the repository root (`go.mod`) and produces a single
+  binary.
+- Standard library first; no third-party dependencies in v1 unless justified with evidence.
+- `gofmt`, `go vet`, and `staticcheck` clean before committing.
 - Tests: `go test -race ./...`.
-- Linux y macOS en v1. Windows compila con un stub que falla con `unsupported_platform`.
-- Fail-fast: un conflicto de puertos falla con un mensaje accionable; nunca se reasigna en
-  silencio.
-- Commits convencionales, sin atribución de IA.
+- Linux and macOS in v1. Windows compiles with a stub that fails with `unsupported_platform`.
+- Fail-fast: a port conflict fails with an actionable message; it is never reassigned silently.
+- Conventional commits, with no AI attribution.
+- Update `CHANGELOG.md` under `[Unreleased]` for user-visible changes.
 
-## Alcance
+## Scope
 
-- Portucca no crea worktrees, no instala dependencias, no ejecuta builds y no supervisa
-  procesos.
-- El registro de claims es global a la máquina; las bandas viven en `portucca.json`, dentro
-  del repo.
-- El checkout principal nunca recibe claims ni escrituras automáticas.
+- Portucca does not create worktrees, install dependencies, run builds, or supervise processes.
+- The claims registry is global to the machine; port ranges live in `portucca.json` inside the
+  repository.
+- The main checkout never receives claims or automatic writes.

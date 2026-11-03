@@ -2,6 +2,15 @@
 
 One stable port per worktree. Sticky, auditable, no `EADDRINUSE`.
 
+<div align="center">
+
+[![Go 1.27](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey)](#requirements)
+[![Arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-lightgrey)](#requirements)
+
+</div>
+
 Portucca allocates development ports across the worktrees of a git repository (and across
 projects sharing the same machine) in a **sticky** way (the same worktree always gets the same
 ports) and **fail-fast** (on a conflict, the process fails with an explicit message instead of

@@ -82,8 +82,8 @@ framework nor a specific `.env` layout.
 ## Installation
 
 > [!NOTE]
-> Portucca is not released yet. The `install.sh` and module commands below apply from
-> `v0.1.0`; until then, build from source.
+> Portucca is available from `v0.1.0`. The `install.sh` and module commands below use the
+> latest release; pin a version with `PORTUCCA_VERSION` or `@v0.1.0`.
 
 ### From source (current development builds)
 
@@ -376,8 +376,7 @@ human-readable text.
 
 ## Status
 
-The v1 CLI is implemented but not released yet. Until `v0.1.0`, install from source. See
-[`CHANGELOG.md`](CHANGELOG.md) for the release history.
+The v1 CLI is implemented. See [`CHANGELOG.md`](CHANGELOG.md) for the release history.
 
 ## Contributing
 

@@ -38,7 +38,11 @@ func TestSetupUsesMainConfigWhenWorktreeHasNoConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(main, "portucca.json"); res.ConfigPath != want {
+	mainReal, err := filepath.EvalSymlinks(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(mainReal, "portucca.json"); res.ConfigPath != want {
 		t.Fatalf("configPath = %q, want %q", res.ConfigPath, want)
 	}
 	if res.Services["web"].Port < 18081 {

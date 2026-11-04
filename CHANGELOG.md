@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `portucca run` now requires `--` immediately before the command; a `--` inside the command
+  arguments no longer satisfies the separator.
+- `portucca run --worktree` selects the claim and env but does not change the command's
+  working directory.
+
+### Fixed
+
+- `portucca run` validates the command before `setup`, so `command_not_found` leaves the
+  registry and env files untouched.
+- `env_conflict` points to `portucca.json` when the conflict is within one service instead of
+  suggesting `--service`.
+- `run`/`setup` load `portucca.json` once, and `ensure` renders env values once.
+
 ## [0.1.0] - 2026-11-04
 
 ### Added

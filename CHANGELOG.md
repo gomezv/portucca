@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-04
+
 ### Added
 
 - CLI commands: `init`, `ensure`, `setup`, `run`, `reallocate`, `prune`, `doctor`, `env`,
@@ -28,3 +30,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release artifacts for Linux and macOS on `amd64` and `arm64`.
 
 [Unreleased]: https://github.com/gomezv/portucca/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/gomezv/portucca/releases/tag/v0.1.0

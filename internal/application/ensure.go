@@ -34,11 +34,7 @@ func (a *App) Ensure(ctx context.Context, worktree string) (EnsureResult, error)
 		return EnsureResult{}, mapConfigErr(err)
 	}
 	if c.IsMain {
-		services := mainServices(cfg)
-		return EnsureResult{
-			Project: cfg.Project, WorktreePath: c.Root, ConfigPath: cfgPath, IsMain: true,
-			Services: services, Env: desiredEnv(c.Root, cfg, services),
-		}, nil
+		return mainEnsureResult(c, cfg, cfgPath), nil
 	}
 	unlock, err := a.Locker.Lock(a.Registry.LockPath(), a.timeout(), false)
 	if err != nil {
@@ -80,7 +76,8 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config, cfgPath string)
 	if err != nil {
 		return EnsureResult{}, mapAllocErr(err)
 	}
-	envChanged, err := a.EnvStore.WriteValues(c.Root, desiredValues(cfg, res.Services))
+	values := desiredValues(cfg, res.Services)
+	envChanged, err := a.EnvStore.WriteValues(c.Root, values)
 	if err != nil {
 		return EnsureResult{}, apperr.New("env_write", err.Error(), "check the env file permissions")
 	}
@@ -95,7 +92,7 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config, cfgPath string)
 	}
 	return EnsureResult{
 		Project: cfg.Project, WorktreePath: c.Root, ConfigPath: cfgPath, Changed: changed,
-		Services: res.Services, Env: desiredEnv(c.Root, cfg, res.Services),
+		Services: res.Services, Env: desiredEnvFrom(c.Root, values),
 	}, nil
 }
 

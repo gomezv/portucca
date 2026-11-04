@@ -27,6 +27,14 @@ func mainServices(cfg domain.Config) map[domain.ServiceName]domain.ServiceClaim 
 	return out
 }
 
+func mainEnsureResult(c project.Context, cfg domain.Config, cfgPath string) EnsureResult {
+	services := mainServices(cfg)
+	return EnsureResult{
+		Project: cfg.Project, WorktreePath: c.Root, ConfigPath: cfgPath, IsMain: true,
+		Services: services, Env: desiredEnv(c.Root, cfg, services),
+	}
+}
+
 func desiredValues(cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim) map[string]map[string]string {
 	out := map[string]map[string]string{}
 	for _, target := range cfg.Env {
@@ -44,7 +52,10 @@ func desiredValues(cfg domain.Config, services map[domain.ServiceName]domain.Ser
 }
 
 func desiredEnv(root string, cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim) []EnvValue {
-	values := desiredValues(cfg, services)
+	return desiredEnvFrom(root, desiredValues(cfg, services))
+}
+
+func desiredEnvFrom(root string, values map[string]map[string]string) []EnvValue {
 	out := make([]EnvValue, 0, len(values))
 	for file, kv := range values {
 		for key, value := range kv {

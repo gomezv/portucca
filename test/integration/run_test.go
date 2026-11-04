@@ -52,6 +52,16 @@ const runConflictConfig = `{
   ]
 }`
 
+const runSameServiceConflictConfig = `{
+  "version": 1,
+  "project": "app",
+  "services": {"web": {"mainPort": 18080, "startPort": 18081}},
+  "env": [
+    {"service": "web", "file": ".env.local", "key": "PORT"},
+    {"service": "web", "file": ".env.prod", "key": "PORT", "template": "http://localhost:{{port}}"}
+  ]
+}`
+
 func buildPortucca(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "portucca")
@@ -154,6 +164,16 @@ func TestRunBinaryEndToEnd(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects a separator after the command", func(t *testing.T) {
+		_, stderr, code := invokeRun(t, bin, wt, regPath, "sh", "-c", "true", "--")
+		if code != 2 {
+			t.Fatalf("exit = %d, want 2", code)
+		}
+		if !strings.Contains(stderr, "run: missing -- before the command") {
+			t.Fatalf("stderr = %q, want the missing separator message", stderr)
+		}
+	})
+
 	t.Run("rejects unknown service", func(t *testing.T) {
 		_, stderr, code := invokeRun(t, bin, wt, regPath, "--service", "nope", "--", "sh", "-c", "true")
 		if code != 2 {
@@ -235,5 +255,32 @@ func TestRunBinaryEnvConflict(t *testing.T) {
 	}
 	if want := fmt.Sprintf("%d", webPort); stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+func TestRunBinaryEnvConflictSameService(t *testing.T) {
+	bin := buildPortucca(t)
+	wt, regPath := runRepo(t, runSameServiceConflictConfig)
+
+	app := newApp(t, regPath)
+	app.Executor = &fakeExecutor{}
+	err := app.Run(context.Background(), application.RunRequest{
+		Worktree: wt,
+		Command:  []string{"sh", "-c", "true"},
+	})
+	e, ok := apperr.As(err)
+	if !ok || e.Code != "env_conflict" {
+		t.Fatalf("err = %v, want env_conflict", err)
+	}
+	if !strings.Contains(e.Hint, "portucca.json") || strings.Contains(e.Hint, "--service") {
+		t.Fatalf("hint = %q, want portucca.json without --service", e.Hint)
+	}
+
+	_, stderr, code := invokeRun(t, bin, wt, regPath, "--", "sh", "-c", "true")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1 (stderr = %s)", code, stderr)
+	}
+	if !strings.Contains(stderr, "portucca.json") || strings.Contains(stderr, "--service") {
+		t.Fatalf("stderr = %q, want portucca.json without --service", stderr)
 	}
 }

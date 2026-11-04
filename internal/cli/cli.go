@@ -109,13 +109,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func hasSeparator(args []string) bool {
-	for _, arg := range args {
-		if arg == "--" {
-			return true
-		}
-	}
-	return false
+func hasRunSeparator(args, rest []string) bool {
+	consumed := len(args) - len(rest)
+	return consumed > 0 && args[consumed-1] == "--"
 }
 
 func execute(cmd string, args []string) (any, bool, error) {
@@ -157,7 +153,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 		}
 		return nil, g.json, apperr.New("usage", err.Error(), "check the flags")
 	}
-	if cmd == "run" && !hasSeparator(args) {
+	if cmd == "run" && !hasRunSeparator(args, fs.Args()) {
 		return nil, false, apperr.New("usage", "run: missing -- before the command", "use -- <command> [args...]")
 	}
 	if !knownCommands[cmd] {

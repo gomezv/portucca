@@ -385,12 +385,34 @@ func TestPrintEnsureSortsServices(t *testing.T) {
 	}
 }
 
-func TestHasSeparator(t *testing.T) {
-	if !hasSeparator([]string{"--service", "web", "--", "npm", "run", "dev"}) {
-		t.Fatal("expected separator")
+func TestHasRunSeparator(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		rest []string
+		want bool
+	}{
+		{"before command", []string{"--service", "web", "--", "npm"}, []string{"npm"}, true},
+		{"no separator", []string{"--service", "web", "npm"}, []string{"npm"}, false},
+		{"trailing separator", []string{"echo", "--"}, []string{"echo", "--"}, false},
+		{"only separator", []string{"--"}, []string{}, true},
 	}
-	if hasSeparator([]string{"npm", "run", "dev"}) {
-		t.Fatal("unexpected separator")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasRunSeparator(tc.args, tc.rest); got != tc.want {
+				t.Fatalf("hasRunSeparator(%v, %v) = %v, want %v", tc.args, tc.rest, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunRejectsTrailingSeparator(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := Run([]string{"run", "echo", "--"}, &out, &errb); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errb.String(), "run: missing -- before the command") {
+		t.Fatalf("stderr = %q, want the missing separator message", errb.String())
 	}
 }
 
@@ -404,6 +426,9 @@ func TestRunHelp(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "--service") || !strings.Contains(out.String(), "exec") {
 		t.Fatalf("stdout = %q, want run flags and exec description", out.String())
+	}
+	if !strings.Contains(out.String(), "--worktree") || !strings.Contains(out.String(), "current directory") {
+		t.Fatalf("stdout = %q, want the --worktree CWD note", out.String())
 	}
 }
 

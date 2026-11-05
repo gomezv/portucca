@@ -37,7 +37,7 @@ func (a *App) PrepareRun(ctx context.Context, req RunRequest) (RunPlan, error) {
 	if err != nil {
 		return RunPlan{}, mapProjectErr(err)
 	}
-	cfg, _, err := a.loadConfigFor(c)
+	cfg, cfgPath, err := a.loadConfigFor(c)
 	if err != nil {
 		return RunPlan{}, mapConfigErr(err)
 	}
@@ -58,7 +58,7 @@ func (a *App) PrepareRun(ctx context.Context, req RunRequest) (RunPlan, error) {
 			"check the command",
 		)
 	}
-	setup, err := a.Setup(ctx, req.Worktree)
+	setup, err := a.setupFrom(ctx, c, cfg, cfgPath)
 	if err != nil {
 		return RunPlan{}, err
 	}
@@ -82,6 +82,7 @@ func (a *App) Run(ctx context.Context, req RunRequest) error {
 
 func runEnvValues(cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim, filter domain.ServiceName) ([]string, error) {
 	values := map[string]string{}
+	owners := map[string]map[domain.ServiceName]bool{}
 	for _, target := range cfg.Env {
 		if filter != "" && target.Service != filter {
 			continue
@@ -91,10 +92,19 @@ func runEnvValues(cfg domain.Config, services map[domain.ServiceName]domain.Serv
 			continue
 		}
 		value := envfile.RenderValue(claim.Port, target.Template)
+		if owners[target.Key] == nil {
+			owners[target.Key] = map[domain.ServiceName]bool{}
+		}
+		owners[target.Key][target.Service] = true
 		if prev, ok := values[target.Key]; ok && prev != value {
+			hint := "use --service <name>"
+			if len(owners[target.Key]) == 1 {
+				for service := range owners[target.Key] {
+					hint = fmt.Sprintf("check the env targets for service %q in portucca.json", service)
+				}
+			}
 			return nil, apperr.New("env_conflict",
-				fmt.Sprintf("env key %q has conflicting values", target.Key),
-				"use --service <name>")
+				fmt.Sprintf("env key %q has conflicting values", target.Key), hint)
 		}
 		values[target.Key] = value
 	}

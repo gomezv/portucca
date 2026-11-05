@@ -238,6 +238,8 @@ Notes:
     same key with different values, use --service.
   - Use run when the framework reads the port from the process environment
     (Next.js, Vite, Nest).
+  - --worktree selects the worktree whose claim and env are used; the command
+    runs in the current directory, not in that worktree.
   - --json is not supported by run.
   - It does not install dependencies, build or supervise processes.
 `,

@@ -2,6 +2,9 @@ package application
 
 import (
 	"context"
+
+	"github.com/gomezv/portucca/internal/domain"
+	"github.com/gomezv/portucca/internal/project"
 )
 
 type BootstrapResult struct {
@@ -24,13 +27,13 @@ func (a *App) Setup(ctx context.Context, worktree string) (SetupResult, error) {
 	if err != nil {
 		return SetupResult{}, mapConfigErr(err)
 	}
+	return a.setupFrom(ctx, c, cfg, cfgPath)
+}
+
+func (a *App) setupFrom(ctx context.Context, c project.Context, cfg domain.Config, cfgPath string) (SetupResult, error) {
 	if c.IsMain {
-		ensure, err := a.Ensure(ctx, worktree)
-		if err != nil {
-			return SetupResult{}, err
-		}
 		return SetupResult{
-			EnsureResult: ensure,
+			EnsureResult: mainEnsureResult(c, cfg, cfgPath),
 			Bootstrap:    BootstrapResult{Copied: []string{}, Symlinked: []string{}, Skipped: []string{}},
 		}, nil
 	}

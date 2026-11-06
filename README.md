@@ -157,7 +157,9 @@ If the repository already declares its services and ports, let portucca detect t
 portucca init --scan
 ```
 
-The scan reads `package.json`, real `.env*` files and `docker-compose.json`/`compose.json`.
+The scan reads `package.json`, real `.env*` files and Compose files: `docker-compose.json`,
+`compose.json`, `compose.yaml`, `compose.yml`, `docker-compose.yaml` and
+`docker-compose.yml`.
 Example env files such as `.env.example` are only a fallback for `mainPort` when no real
 `.env*` file has a port signal, and that fallback emits a warning. If the scan cannot
 determine every required value, it writes nothing and lists the gaps; add `--project` or

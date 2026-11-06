@@ -119,3 +119,37 @@ func TestInitScanIncompleteWritesNothing(t *testing.T) {
 		t.Fatalf("config was written: %v", err)
 	}
 }
+
+func TestInitScanUsesComposeYAML(t *testing.T) {
+	main := t.TempDir()
+	git(t, main, "init", "-q")
+	writeScanFile(t, main, "apps/api/package.json", `{"name":"@app/api","scripts":{"dev":"nest start"}}`)
+	writeScanFile(t, main, "compose.yaml", "services:\n  api:\n    ports:\n      - \"4000:4000\"\n")
+	git(t, main, "add", ".")
+	git(t, main, "commit", "-qm", "init")
+
+	app := newApp(t, filepath.Join(t.TempDir(), "ports.json"))
+	got, err := app.Init(context.Background(), application.InitRequest{Scan: true, Worktree: main})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadFile(filepath.Join(main, "portucca.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Services["api"].MainPort != 4000 {
+		t.Fatalf("api mainPort = %d, want 4000", cfg.Services["api"].MainPort)
+	}
+	if got.Scan == nil {
+		t.Fatal("scan result is nil")
+	}
+	found := false
+	for _, source := range got.Scan.Sources {
+		if source.Field == "services.api.mainPort" && source.Value == "4000" && source.Source == "compose.yaml:services.api.ports" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("sources = %+v, want compose.yaml mainPort source", got.Scan.Sources)
+	}
+}

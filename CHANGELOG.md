@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `portucca init --scan` reads Compose YAML (`compose.yaml`, `compose.yml`,
+  `docker-compose.yaml`, `docker-compose.yml`) in addition to Compose JSON, with the same
+  enrichment rules.
+
 ## [0.2.0] - 2026-11-06
 
 ### Added

@@ -236,6 +236,28 @@ func TestRenderValue(t *testing.T) {
 	}
 }
 
+func TestDocumentEntries(t *testing.T) {
+	doc, err := Parse([]byte("export PORT=3004\n# comment\nA='x y'\nB=1 # note\nPORT=3005\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := doc.Entries()
+	want := []Entry{
+		{Key: "PORT", Value: "3004"},
+		{Key: "A", Value: "x y"},
+		{Key: "B", Value: "1"},
+		{Key: "PORT", Value: "3005"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Entries() = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Entries()[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
 func TestParseExportAndCRLF(t *testing.T) {
 	doc, err := Parse([]byte("export PORT=3000\r\nOTHER=1\r\n"))
 	if err != nil {

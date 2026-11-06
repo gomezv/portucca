@@ -79,6 +79,10 @@ framework nor a specific `.env` layout.
    `$XDG_STATE_HOME/portucca/ports.json` (or `~/.local/state/portucca/ports.json`) and is
    protected by an exclusive `flock`.
 
+A claim follows the canonical worktree path (`realpath`). Moving a worktree with
+`git worktree move` or renaming its directory changes that path, so it receives a new claim
+and new ports; `ensure` or `prune` removes the old claim once the old path no longer exists.
+
 ## Installation
 
 > [!NOTE]

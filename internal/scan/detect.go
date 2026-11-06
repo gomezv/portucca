@@ -12,6 +12,7 @@ import (
 
 	"github.com/gomezv/portucca/internal/domain"
 	"github.com/gomezv/portucca/internal/envfile"
+	"go.yaml.in/yaml/v4"
 )
 
 const (
@@ -134,6 +135,15 @@ func (s *scanner) readEnv(file, rel string) {
 }
 
 func (s *scanner) readCompose(file, rel string) {
+	switch path.Ext(rel) {
+	case ".json":
+		s.readComposeJSON(file, rel)
+	case ".yaml", ".yml":
+		s.readComposeYAML(file, rel)
+	}
+}
+
+func (s *scanner) readComposeJSON(file, rel string) {
 	data, err := s.readFile(file)
 	if err != nil {
 		s.warn(fmt.Sprintf("ignoring %s: %v", rel, err))
@@ -148,16 +158,54 @@ func (s *scanner) readCompose(file, rel string) {
 		s.warn(fmt.Sprintf("ignoring %s: %v", rel, err))
 		return
 	}
-	names := make([]string, 0, len(compose.Services))
-	for name := range compose.Services {
+	services := make(map[string][]json.RawMessage, len(compose.Services))
+	for name, svc := range compose.Services {
+		services[name] = svc.Ports
+	}
+	s.addCompose(rel, services)
+}
+
+func (s *scanner) readComposeYAML(file, rel string) {
+	data, err := s.readFile(file)
+	if err != nil {
+		s.warn(fmt.Sprintf("ignoring %s: %v", rel, err))
+		return
+	}
+	var compose struct {
+		Services map[string]struct {
+			Ports []any `yaml:"ports"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Load(data, &compose); err != nil {
+		s.warn(fmt.Sprintf("ignoring %s: %v", rel, err))
+		return
+	}
+	services := make(map[string][]json.RawMessage, len(compose.Services))
+	for name, svc := range compose.Services {
+		ports := make([]json.RawMessage, 0, len(svc.Ports))
+		for _, port := range svc.Ports {
+			raw, err := json.Marshal(port)
+			if err != nil {
+				continue
+			}
+			ports = append(ports, raw)
+		}
+		services[name] = ports
+	}
+	s.addCompose(rel, services)
+}
+
+func (s *scanner) addCompose(rel string, services map[string][]json.RawMessage) {
+	names := make([]string, 0, len(services))
+	for name := range services {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		svc := compose.Services[name]
-		port, ok := publishedPort(svc.Ports)
+		ports := services[name]
+		port, ok := publishedPort(ports)
 		if !ok {
-			if len(svc.Ports) > 0 {
+			if len(ports) > 0 {
 				s.warn(fmt.Sprintf("ignoring %s: services.%s has multiple or unsupported published ports", rel, name))
 			}
 			continue
@@ -295,13 +343,23 @@ func parseHostPort(value string) (int, bool) {
 	return n, true
 }
 
+func isComposeName(name string) bool {
+	switch name {
+	case "docker-compose.json", "compose.json",
+		"compose.yaml", "compose.yml",
+		"docker-compose.yaml", "docker-compose.yml":
+		return true
+	}
+	return false
+}
+
 func (s *scanner) detectFile(file, rel string) {
 	switch {
 	case path.Base(rel) == "package.json":
 		s.readPackage(file, rel)
 	case isEnvName(path.Base(rel)):
 		s.readEnv(file, rel)
-	case path.Base(rel) == "docker-compose.json" || path.Base(rel) == "compose.json":
+	case isComposeName(path.Base(rel)):
 		s.readCompose(file, rel)
 	}
 }

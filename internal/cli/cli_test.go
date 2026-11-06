@@ -534,8 +534,11 @@ func TestInitScanHelp(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0", code)
 	}
-	if !strings.Contains(out.String(), "--scan") {
-		t.Fatalf("help = %q, want --scan", out.String())
+	text := out.String()
+	for _, want := range []string{"--scan", "Compose JSON/YAML"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("help = %q, want %q", text, want)
+		}
 	}
 }
 

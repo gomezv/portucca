@@ -67,7 +67,7 @@ Flags:
 What it does:
   Writes portucca.json at the repository root after validating the project,
   services, ports and preset. With --scan, detects signals from package.json,
-  .env* and docker-compose.json; explicit flags override detected values.
+  .env* and docker-compose.json/compose.json; explicit flags override detected values.
   It does not touch the claims registry.
 
 Examples:

@@ -16,9 +16,9 @@
 </div>
 
 Portucca allocates development ports across the worktrees of a git repository (and across
-projects sharing the same machine) in a **sticky** way (the same worktree always gets the same
-ports) and **fail-fast** (on a conflict, the process fails with an explicit message instead of
-silently moving to another port).
+projects of the same user sharing a machine) in a **sticky** way (the same worktree always gets
+the same ports) and **fail-fast** (on a conflict, the process fails with an explicit message
+instead of silently moving to another port).
 
 ## Contents
 
@@ -39,12 +39,15 @@ silently moving to another port).
 
 | Problem | What portucca does |
 |---|---|
-| Two worktrees request the same port | Allocates ports per worktree with a global claims registry and locking (`flock`) |
+| Two worktrees request the same port | Allocates ports per worktree with a single per-user claims registry and locking (`flock`) |
 | The port changes on every start | The claim follows the worktree **directory**: if the stack stops and starts again, the URL stays the same |
 | A new worktree does not start | Declarative bootstrap: copies files from the main checkout and creates symlinks |
 | Ports already exist in env files | `adoptFrom` registers the existing port without binding or tearing down the stack |
-| Two projects on the same machine collide | A single registry with claims tagged by project |
+| Two projects of the same user collide | A single per-user registry with claims tagged by project |
 | The main checkout receives writes | The main checkout has reserved ports and never enters the registry |
+
+The claims registry is per user: two OS users on the same machine keep separate registries, so
+cross-user collisions are outside v1 and must be avoided with distinct port ranges.
 
 Portucca is language-agnostic: it works with N services per project and assumes neither a
 framework nor a specific `.env` layout.
@@ -70,7 +73,7 @@ framework nor a specific `.env` layout.
 2. `portucca init` writes that file. `portucca setup` prepares a worktree: it bootstraps files
    from the main checkout and then runs `ensure`. `portucca run` performs that same
    preparation and then execs an explicit command with the resolved environment.
-3. `ensure` assigns one port per service, stores the claim in a machine-wide registry keyed by
+3. `ensure` assigns one port per service, stores the claim in a per-user registry keyed by
    the worktree path, and writes the values to the configured env files. The claim survives
    restarts and is released on the next `ensure` or `prune` after the worktree directory is
    deleted.
@@ -81,7 +84,8 @@ framework nor a specific `.env` layout.
 
 A claim follows the canonical worktree path (`realpath`). Moving a worktree with
 `git worktree move` or renaming its directory changes that path, so it receives a new claim
-and new ports; `ensure` or `prune` removes the old claim once the old path no longer exists.
+and newly assigned ports (which may match the previous values); `ensure` or `prune` removes
+the old claim once the old path no longer exists.
 
 ## Installation
 

@@ -26,10 +26,12 @@ Thanks for your interest in portucca. Issues and pull requests are welcome.
 
 ## Verification
 
+CI runs `staticcheck` v0.8.2, pinned in `.github/workflows/ci.yml`.
+
 ```bash
 go test -race ./...
 go vet ./...
-staticcheck ./...      # when installed
+staticcheck ./...      # v0.8.2, pinned in CI
 ```
 
 Before opening a pull request, also make sure `gofmt -l .` returns no files.

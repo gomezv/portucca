@@ -9,6 +9,7 @@ import (
 	"github.com/gomezv/portucca/internal/apperr"
 	"github.com/gomezv/portucca/internal/application"
 	"github.com/gomezv/portucca/internal/domain"
+	"github.com/gomezv/portucca/internal/scan"
 )
 
 type versionInfo struct {
@@ -51,6 +52,17 @@ func writeHuman(w io.Writer, cmd string, data any, err error) {
 		if ae.Hint != "" {
 			fmt.Fprintf(w, "hint: %s\n", ae.Hint)
 		}
+		if ae.Code == "scan_incomplete" {
+			if gaps, ok := ae.Details["gaps"].([]scan.Gap); ok {
+				for _, gap := range gaps {
+					fmt.Fprintf(w, "gap: %s (%s): %s\n", gap.Field, gap.Reason, gap.Message)
+					for _, flag := range gap.Flags {
+						fmt.Fprintf(w, "hint: %s\n", flag)
+					}
+				}
+			}
+			fmt.Fprintln(w, "hint: use --json to inspect the full proposal")
+		}
 		return
 	}
 	switch v := data.(type) {
@@ -84,6 +96,14 @@ func writeHuman(w io.Writer, cmd string, data any, err error) {
 		fmt.Fprintf(w, "config: %s\nproject: %s\n", v.ConfigPath, v.Project)
 		if v.Warning != "" {
 			fmt.Fprintf(w, "warning: %s\n", v.Warning)
+		}
+		if v.Scan != nil {
+			for _, source := range v.Scan.Sources {
+				fmt.Fprintf(w, "%s=%s (%s)\n", source.Field, source.Value, source.Source)
+			}
+			for _, warning := range v.Scan.Warnings {
+				fmt.Fprintf(w, "warning: %s\n", warning)
+			}
 		}
 	default:
 		fmt.Fprintf(w, "%v\n", v)

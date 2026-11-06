@@ -55,27 +55,34 @@ var commandHelpText = map[string]string{
 	"init": `portucca init — create portucca.json
 
 Usage:
-  portucca init --project <slug> --service <name:main:start>... [flags]
+  portucca init [--scan] [--project <slug>] [--service <name:main:start>]... [flags]
 
 Flags:
-  --project <slug>       Project slug (required; lowercase letters, digits, hyphens)
-  --service <spec>       Service as name:mainPort:startPort (repeatable, required)
+  --scan                 Detect services, ports and env from the repository
+  --project <slug>       Project slug (required without --scan)
+  --service <spec>       Service as name:mainPort:startPort (repeatable; required without --scan)
   --preset <name>        generic (default), node-vite-nest, or next
   --force                Overwrite an existing portucca.json
 
 What it does:
   Writes portucca.json at the repository root after validating the project,
-  services, ports and preset. It does not touch the claims registry.
+  services, ports and preset. With --scan, detects signals from package.json,
+  .env* and docker-compose.json; explicit flags override detected values.
+  It does not touch the claims registry.
 
 Examples:
   portucca init --project app --service web:5173:5174
-  portucca init --project app --preset node-vite-nest \
-    --service web:5173:5174 --service api:3004:3005
+  portucca init --scan
+  portucca init --scan --project app --service api:3004:3005
 
 Notes:
+  - Without --scan, --project and at least one --service are required.
+  - --scan and --preset are mutually exclusive.
+  - If the scan cannot determine every required value, it writes nothing and
+    reports the gaps with the flags to add.
   - mainPort is reserved for the main checkout.
-  - startPort is the first candidate for worktrees; the actual assignment
-    happens in ensure/setup based on claims and port availability.
+  - startPort is the first candidate for worktrees; when --scan derives it, it
+    is the smallest free port above mainPort.
   - The node-vite-nest preset expects the web+api layout and fills env and
     bootstrap for apps/web, apps/api and .env.
   - The next preset expects one service named web and fills PORT and

@@ -373,8 +373,8 @@ func TestScanDropsRootOrchestrator(t *testing.T) {
 		t.Fatalf("api = %+v, want mainPort 3004", got.Services[0])
 	}
 	warnings := strings.Join(got.Warnings, " ")
-	if !strings.Contains(warnings, "orchestrator") && !strings.Contains(warnings, "root") {
-		t.Fatalf("warnings = %+v, want an orchestrator or root warning", got.Warnings)
+	if !strings.Contains(warnings, "orchestrator") || !strings.Contains(warnings, "--service") {
+		t.Fatalf("warnings = %+v, want an orchestrator warning with the --service hint", got.Warnings)
 	}
 	for _, target := range got.Env {
 		if target.File == ".env" {

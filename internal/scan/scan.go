@@ -17,6 +17,7 @@ func Scan(ctx context.Context, opts Options) (Detected, error) {
 	}
 	s := &scanner{
 		opts:     opts,
+		ctx:      ctx,
 		byDir:    map[string]*candidate{},
 		packages: map[string]packageInfo{},
 	}

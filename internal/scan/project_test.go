@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +32,7 @@ func TestDetectProjectFromDirectory(t *testing.T) {
 	if err := os.Mkdir(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	got := detectProject(root)
+	got := detectProject(context.Background(), root)
 	if got == nil || got.Value != "my-app" || got.Source != "directory" {
 		t.Fatalf("detectProject = %+v, want my-app from directory", got)
 	}
@@ -47,7 +48,7 @@ func TestDetectProjectFromRemote(t *testing.T) {
 	}
 	run("init", "-q")
 	run("remote", "add", "origin", "git@github.com:acme/My-App.git")
-	got := detectProject(root)
+	got := detectProject(context.Background(), root)
 	if got == nil || got.Value != "my-app" || got.Source != "remote origin" {
 		t.Fatalf("detectProject = %+v, want my-app from remote origin", got)
 	}

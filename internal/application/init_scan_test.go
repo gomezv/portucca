@@ -85,6 +85,15 @@ func TestInitScanIncompleteDoesNotWrite(t *testing.T) {
 	if !ok || len(gaps) == 0 {
 		t.Fatalf("details = %+v, want gaps", ae.Details)
 	}
+	sources, ok := ae.Details["sources"].([]ScanSource)
+	if !ok {
+		t.Fatalf("details = %+v, want sources", ae.Details)
+	}
+	for _, source := range sources {
+		if source.Field == "services.api.startPort" {
+			t.Fatalf("sources = %+v, want no startPort source for an incomplete service", sources)
+		}
+	}
 	if _, err := os.Stat(filepath.Join(dir, "portucca.json")); !os.IsNotExist(err) {
 		t.Fatalf("config was written: %v", err)
 	}
@@ -262,6 +271,28 @@ func TestDeriveStartPortSkipsUsed(t *testing.T) {
 	}
 	if got := merged.Config.Services["web"].StartPort; got != 8083 {
 		t.Fatalf("web startPort = %d, want 8083", got)
+	}
+}
+
+func TestInitScanCopiesFileWithoutEnvTarget(t *testing.T) {
+	det := scan.Detected{
+		Project: &scan.Value{Value: "app", Source: "directory"},
+		Services: []scan.Service{{
+			Name: "web", Dir: ".", NameSource: "directory",
+			MainPort: &scan.Value{Value: "8080", Source: ".env:PORT"},
+		}},
+		CopyFromMain: []scan.CopyFile{{Service: "web", File: ".env"}},
+	}
+	app, dir := scanApp(t, det)
+	if _, err := app.Init(context.Background(), InitRequest{Scan: true, Worktree: dir}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadFile(filepath.Join(dir, "portucca.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Bootstrap.CopyFromMain) != 1 || cfg.Bootstrap.CopyFromMain[0] != ".env" {
+		t.Fatalf("bootstrap = %+v, want .env copied without an env target", cfg.Bootstrap)
 	}
 }
 

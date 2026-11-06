@@ -115,6 +115,7 @@ type candidate struct {
 
 type scanner struct {
 	opts     Options
+	ctx      context.Context
 	byDir    map[string]*candidate
 	packages map[string]packageInfo
 	compose  []composeSignal
@@ -122,14 +123,12 @@ type scanner struct {
 	visited  int
 }
 
-var skippedDirs = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true, "dist": true, "build": true,
-	".next": true, ".turbo": true, "coverage": true, ".venv": true, "venv": true,
-	"__pycache__": true, "bin": true, "obj": true, "target": true,
-}
-
 func skipDir(name string) bool {
-	return strings.HasPrefix(name, ".") || skippedDirs[name]
+	switch name {
+	case "node_modules", "vendor", "dist", "build", "coverage", "venv", "__pycache__", "bin", "obj", "target":
+		return true
+	}
+	return strings.HasPrefix(name, ".")
 }
 
 func isEnvName(name string) bool {

@@ -444,9 +444,11 @@ func buildSources(explicit map[domain.ServiceName]domain.Service, det scan.Detec
 				Field: "services." + raw + ".mainPort", Value: detected.MainPort.Value, Source: detected.MainPort.Source,
 			})
 		}
-		sources = append(sources, ScanSource{
-			Field: "services." + raw + ".startPort", Value: strconv.Itoa(int(svc.StartPort)), Source: "derived",
-		})
+		if svc.StartPort.Valid() {
+			sources = append(sources, ScanSource{
+				Field: "services." + raw + ".startPort", Value: strconv.Itoa(int(svc.StartPort)), Source: "derived",
+			})
+		}
 	}
 	for i, target := range env {
 		sources = append(sources, ScanSource{

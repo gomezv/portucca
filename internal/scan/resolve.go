@@ -22,7 +22,7 @@ func (s *scanner) result() Detected {
 				s.warn("ignoring root .env/package.json signals in a multi-service repository; use --service to declare a root service")
 			case !s.rootHasPortSignal(c, pkg):
 				delete(s.byDir, ".")
-				s.warn("ignoring root package.json scripts without a port in a multi-service repository; treating the root as an orchestrator")
+				s.warn("ignoring root package.json scripts without a port in a multi-service repository; treating the root as an orchestrator (pass --service <name>:<main>:<start> to declare a root service)")
 			default:
 				ignoredEnv := false
 				ports := c.ports[:0]
@@ -121,7 +121,7 @@ func (s *scanner) result() Detected {
 	sort.Strings(warnings)
 	sortGaps(gaps)
 	return Detected{
-		Project: detectProject(s.opts.Root), Services: services, Env: env,
+		Project: detectProject(s.ctx, s.opts.Root), Services: services, Env: env,
 		CopyFromMain: copyFiles, Warnings: warnings, Gaps: gaps,
 	}
 }
@@ -174,15 +174,25 @@ func resolveNameCollisions(dirs []string, byDir map[string]*candidate, warnings 
 			continue
 		}
 		base := c.name
-		for i := 2; used[c.name]; i++ {
-			c.name = domain.ServiceName(fmt.Sprintf("%s-%d", base, i))
-		}
+		c.name = uniqueName(base, used)
 		if c.name != base {
 			*warnings = append(*warnings, fmt.Sprintf("service name collision: %s renamed to %s; pass --service to choose", base, c.name))
 		}
 		used[c.name] = true
 	}
 	return gaps
+}
+
+func uniqueName(base domain.ServiceName, used map[domain.ServiceName]bool) domain.ServiceName {
+	if !used[base] {
+		return base
+	}
+	for i := 2; ; i++ {
+		candidate := domain.ServiceName(fmt.Sprintf("%s-%d", base, i))
+		if !used[candidate] {
+			return candidate
+		}
+	}
 }
 
 func (c *candidate) resolveName(root string, pkg packageInfo) {

@@ -1,13 +1,14 @@
 package scan
 
 import (
+	"context"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-func detectProject(root string) *Value {
-	if out, err := exec.Command("git", "-C", root, "remote", "get-url", "origin").Output(); err == nil {
+func detectProject(ctx context.Context, root string) *Value {
+	if out, err := exec.CommandContext(ctx, "git", "-C", root, "remote", "get-url", "origin").Output(); err == nil {
 		if name := repoName(strings.TrimSpace(string(out))); name != "" {
 			return &Value{Value: name, Source: "remote origin"}
 		}

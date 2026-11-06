@@ -19,6 +19,7 @@ import (
 	"github.com/gomezv/portucca/internal/platform"
 	"github.com/gomezv/portucca/internal/project"
 	"github.com/gomezv/portucca/internal/registry"
+	"github.com/gomezv/portucca/internal/scan"
 )
 
 func git(t *testing.T, dir string, args ...string) {
@@ -57,6 +58,7 @@ func newApp(t *testing.T, registryPath string) *application.App {
 		Locker:      platform.Locker{},
 		Prober:      netprobe.Prober{},
 		EnvStore:    envfile.Store{},
+		Scanner:     scan.Scanner{},
 		LockTimeout: 2 * time.Second,
 	}
 }

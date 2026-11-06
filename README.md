@@ -143,6 +143,18 @@ git add portucca.json
 git commit -m "chore: add portucca config"
 ```
 
+If the repository already declares its services and ports, let portucca detect them:
+
+```bash
+portucca init --scan
+```
+
+The scan reads `package.json`, real `.env*` files and `docker-compose.json`/`compose.json`.
+Example env files such as `.env.example` are only a fallback for `mainPort` when no real
+port signal exists, and that fallback emits a warning. If the scan cannot determine every
+required value, it writes nothing and lists the gaps; add `--project` or `--service` to fill
+them. `--scan` and `--preset` are mutually exclusive.
+
 `portucca init` writes the file; `git add` and `git commit` are ordinary Git, not portucca
 commands. Commit it once so worktrees created from this branch include it. You do not repeat
 this for each worktree.

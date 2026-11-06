@@ -55,6 +55,37 @@ func parseKey(raw string) string {
 	return key
 }
 
+type Entry struct {
+	Key   string
+	Value string
+}
+
+func (d *Document) Entries() []Entry {
+	out := make([]Entry, 0, len(d.lines))
+	for _, l := range d.lines {
+		if l.key == "" {
+			continue
+		}
+		value, ok := entryValue(l.raw)
+		if !ok {
+			continue
+		}
+		out = append(out, Entry{Key: l.key, Value: value})
+	}
+	return out
+}
+
+func entryValue(raw string) (string, bool) {
+	s := strings.TrimSpace(raw)
+	s = strings.TrimPrefix(s, "export ")
+	eq := strings.IndexByte(s, '=')
+	if eq < 0 {
+		return "", false
+	}
+	value, _ := splitValue(s[eq+1:])
+	return value, true
+}
+
 func commentIndex(s string) int {
 	for i := 1; i < len(s); i++ {
 		if s[i] == '#' && (s[i-1] == ' ' || s[i-1] == '\t') {
@@ -100,14 +131,7 @@ func (d *Document) Get(key string) (string, bool) {
 		if l.key != key {
 			continue
 		}
-		s := strings.TrimSpace(l.raw)
-		s = strings.TrimPrefix(s, "export ")
-		eq := strings.IndexByte(s, '=')
-		if eq < 0 {
-			continue
-		}
-		value, _ := splitValue(s[eq+1:])
-		return value, true
+		return entryValue(l.raw)
 	}
 	return "", false
 }

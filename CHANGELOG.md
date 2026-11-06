@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-06
+
+### Added
+
+- `portucca init --scan` detects services, ports, env targets and bootstrap files from
+  `package.json`, `.env*` and `docker-compose.json`/`compose.json`, and fails with actionable
+  gaps when the repository does not provide enough information.
+
 ## [0.1.1] - 2026-11-05
 
 ### Changed
@@ -46,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `install.sh` with OS/architecture detection and SHA-256 checksum verification.
 - Release artifacts for Linux and macOS on `amd64` and `arm64`.
 
-[Unreleased]: https://github.com/gomezv/portucca/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/gomezv/portucca/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/gomezv/portucca/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/gomezv/portucca/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gomezv/portucca/releases/tag/v0.1.0

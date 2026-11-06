@@ -29,6 +29,9 @@ var (
 	keyPattern     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
 
+func ValidProject(s string) bool     { return projectPattern.MatchString(s) }
+func ValidServiceName(s string) bool { return servicePattern.MatchString(s) }
+
 type EnvRef struct {
 	File string `json:"file"`
 	Key  string `json:"key"`

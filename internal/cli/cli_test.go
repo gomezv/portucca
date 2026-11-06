@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -429,6 +430,112 @@ func TestRunHelp(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "--worktree") || !strings.Contains(out.String(), "current directory") {
 		t.Fatalf("stdout = %q, want the --worktree CWD note", out.String())
+	}
+}
+
+func TestInitScanRejectsPreset(t *testing.T) {
+	dir := newGitWorktree(t)
+	var out, errb bytes.Buffer
+	code := Run([]string{
+		"init", "--scan", "--preset", "generic", "--worktree", dir, "--json",
+	}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(out.String(), `"code": "usage"`) {
+		t.Fatalf("out = %q, want usage", out.String())
+	}
+}
+
+func TestInitScanWritesConfig(t *testing.T) {
+	dir := newGitWorktree(t)
+	api := filepath.Join(dir, "apps", "api")
+	if err := os.MkdirAll(api, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(api, ".env"), []byte("PORT=19004\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"init", "--scan", "--worktree", dir, "--json"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, out=%s err=%s", code, out.String(), errb.String())
+	}
+	var env struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Project  string `json:"project"`
+			Services map[string]struct {
+				MainPort  int `json:"mainPort"`
+				StartPort int `json:"startPort"`
+			} `json:"services"`
+			Scan struct {
+				Sources []application.ScanSource `json:"sources"`
+			} `json:"scan"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("out = %q: %v", out.String(), err)
+	}
+	if !env.OK || env.Data.Services["api"].MainPort != 19004 || env.Data.Services["api"].StartPort != 19005 {
+		t.Fatalf("data = %+v", env.Data)
+	}
+	if len(env.Data.Scan.Sources) == 0 {
+		t.Fatalf("sources = %+v, want at least one", env.Data.Scan.Sources)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "portucca.json")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInitScanHumanOutput(t *testing.T) {
+	dir := newGitWorktree(t)
+	api := filepath.Join(dir, "apps", "api")
+	if err := os.MkdirAll(api, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(api, ".env"), []byte("PORT=19004\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"init", "--scan", "--worktree", dir}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, out=%s err=%s", code, out.String(), errb.String())
+	}
+	got := out.String()
+	for _, want := range []string{"env[0]=", "bootstrap.copyFromMain[0]=", "services.api.name="} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestInitScanIncompleteJSON(t *testing.T) {
+	dir := newGitWorktree(t)
+	var out, errb bytes.Buffer
+	code := Run([]string{"init", "--scan", "--worktree", dir, "--json"}, &out, &errb)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; out=%s err=%s", code, out.String(), errb.String())
+	}
+	if !strings.Contains(out.String(), `"code": "scan_incomplete"`) {
+		t.Fatalf("out = %q, want scan_incomplete", out.String())
+	}
+	if !strings.Contains(out.String(), `"gaps"`) {
+		t.Fatalf("out = %q, want gaps", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "portucca.json")); !os.IsNotExist(err) {
+		t.Fatalf("config was written: %v", err)
+	}
+}
+
+func TestInitScanHelp(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"help", "init"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "--scan") {
+		t.Fatalf("help = %q, want --scan", out.String())
 	}
 }
 

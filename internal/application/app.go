@@ -1,10 +1,12 @@
 package application
 
 import (
+	"context"
 	"time"
 
 	"github.com/gomezv/portucca/internal/domain"
 	"github.com/gomezv/portucca/internal/project"
+	"github.com/gomezv/portucca/internal/scan"
 )
 
 type Locator interface {
@@ -38,6 +40,10 @@ type EnvStore interface {
 	EnsureSymlink(wtRoot string, s domain.Symlink) (bool, error)
 }
 
+type ScanRunner interface {
+	Scan(ctx context.Context, opts scan.Options) (scan.Detected, error)
+}
+
 type App struct {
 	Locator     Locator
 	Config      ConfigLoader
@@ -46,6 +52,7 @@ type App struct {
 	Prober      Prober
 	EnvStore    EnvStore
 	Executor    Executor
+	Scanner     ScanRunner
 	ConfigFile  string
 	Now         func() time.Time
 	LockTimeout time.Duration

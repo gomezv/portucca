@@ -18,6 +18,7 @@ import (
 	"github.com/gomezv/portucca/internal/platform"
 	"github.com/gomezv/portucca/internal/project"
 	"github.com/gomezv/portucca/internal/registry"
+	"github.com/gomezv/portucca/internal/scan"
 )
 
 type globalFlags struct {
@@ -128,6 +129,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 	var initProject string
 	var initPreset string
 	var initForce bool
+	var initScan bool
 	var services stringList
 	var runService string
 	switch cmd {
@@ -140,6 +142,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 		fs.StringVar(&initProject, "project", "", "")
 		fs.StringVar(&initPreset, "preset", "", "")
 		fs.BoolVar(&initForce, "force", false, "")
+		fs.BoolVar(&initScan, "scan", false, "")
 		fs.Var(&services, "service", "")
 	case "version":
 		var versionFlag bool
@@ -172,8 +175,16 @@ func execute(cmd string, args []string) (any, bool, error) {
 	if cmd == "list" && all && projectFlag != "" {
 		return nil, g.json, apperr.New("usage", "--all and --project are mutually exclusive", "")
 	}
-	if cmd == "init" && (initProject == "" || len(services) == 0) {
-		return nil, g.json, apperr.New("usage", "--project and at least one --service are required", "")
+	if cmd == "init" {
+		if initScan && initPreset != "" {
+			return nil, g.json, apperr.New("usage", "--scan and --preset are mutually exclusive", "drop one of them")
+		}
+		if !initScan && (initProject == "" || len(services) == 0) {
+			return nil, g.json, apperr.New("usage", "--project and at least one --service are required", "")
+		}
+		if initScan && initProject != "" && !domain.ValidProject(initProject) {
+			return nil, g.json, apperr.New("usage", "invalid project "+initProject, "use a lowercase slug")
+		}
 	}
 	if err := platform.Check(); err != nil {
 		return nil, g.json, apperr.New("unsupported_platform", err.Error(), "this platform is not supported yet")
@@ -202,6 +213,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 		Prober:      netprobe.Prober{},
 		EnvStore:    envfile.Store{},
 		Executor:    platform.Executor{},
+		Scanner:     scan.Scanner{},
 		ConfigFile:  g.config,
 		LockTimeout: g.lockTimeout,
 	}
@@ -231,6 +243,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 	case "init":
 		data, err := app.Init(ctx, application.InitRequest{
 			Project: initProject, Services: services, Preset: initPreset, Force: initForce,
+			Scan:     initScan,
 			Worktree: g.worktree, ConfigPath: g.config,
 		})
 		return data, g.json, err

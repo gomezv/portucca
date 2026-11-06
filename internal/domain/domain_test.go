@@ -91,3 +91,12 @@ func TestConfigServiceNamesAreSorted(t *testing.T) {
 		t.Fatalf("ServiceNames() = %v, want [api web]", got)
 	}
 }
+
+func TestValidProjectAndServiceName(t *testing.T) {
+	if !ValidProject("app-1") || ValidProject("App") || ValidProject("") {
+		t.Fatal("ValidProject is wrong")
+	}
+	if !ValidServiceName("web") || ValidServiceName("Web") || ValidServiceName("1web") {
+		t.Fatal("ValidServiceName is wrong")
+	}
+}

@@ -28,3 +28,7 @@ jobs:
             echo "$unformatted" >&2
             exit 1
           fi
+      - name: Staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
+          staticcheck ./...

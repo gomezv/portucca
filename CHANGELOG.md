@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `portucca init --scan` detects services, ports, env targets and bootstrap files from
+  `package.json`, `.env*` and `docker-compose.json`, and fails with actionable gaps when the
+  repository does not provide enough information.
+
 ## [0.1.1] - 2026-11-05
 
 ### Changed

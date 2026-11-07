@@ -130,6 +130,8 @@ func execute(cmd string, args []string) (any, bool, error) {
 	var initPreset string
 	var initForce bool
 	var initScan bool
+	var initCompose bool
+	var excludeServices stringList
 	var services stringList
 	var runService string
 	switch cmd {
@@ -143,6 +145,8 @@ func execute(cmd string, args []string) (any, bool, error) {
 		fs.StringVar(&initPreset, "preset", "", "")
 		fs.BoolVar(&initForce, "force", false, "")
 		fs.BoolVar(&initScan, "scan", false, "")
+		fs.BoolVar(&initCompose, "compose", false, "")
+		fs.Var(&excludeServices, "exclude-service", "")
 		fs.Var(&services, "service", "")
 	case "version":
 		var versionFlag bool
@@ -178,6 +182,20 @@ func execute(cmd string, args []string) (any, bool, error) {
 	if cmd == "init" {
 		if initScan && initPreset != "" {
 			return nil, g.json, apperr.New("usage", "--scan and --preset are mutually exclusive", "drop one of them")
+		}
+		if initCompose && !initScan {
+			return nil, g.json, apperr.New("usage", "--compose requires --scan", "add --scan or drop --compose")
+		}
+		if len(excludeServices) > 0 && !initCompose {
+			return nil, g.json, apperr.New("usage", "--exclude-service requires --compose", "add --compose or drop --exclude-service")
+		}
+		if len(excludeServices) > 0 && len(services) > 0 {
+			return nil, g.json, apperr.New("usage", "--exclude-service cannot be combined with --service", "drop one of them")
+		}
+		for _, name := range excludeServices {
+			if !domain.ValidServiceName(string(scan.NormalizeServiceName(name))) {
+				return nil, g.json, apperr.New("usage", "invalid --exclude-service "+name, "use a lowercase service name")
+			}
 		}
 		if !initScan && (initProject == "" || len(services) == 0) {
 			return nil, g.json, apperr.New("usage", "--project and at least one --service are required", "")
@@ -243,7 +261,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 	case "init":
 		data, err := app.Init(ctx, application.InitRequest{
 			Project: initProject, Services: services, Preset: initPreset, Force: initForce,
-			Scan:     initScan,
+			Scan: initScan, Compose: initCompose, ExcludeServices: excludeServices,
 			Worktree: g.worktree, ConfigPath: g.config,
 		})
 		return data, g.json, err

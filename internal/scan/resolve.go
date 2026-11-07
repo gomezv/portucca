@@ -49,6 +49,27 @@ func (s *scanner) result() Detected {
 	for _, dir := range dirs {
 		s.byDir[dir].resolveName(s.opts.Root, s.packages[dir])
 	}
+	seenNames := map[domain.ServiceName]bool{}
+	for _, dir := range dirs {
+		if name := s.byDir[dir].name; name != "" {
+			seenNames[name] = true
+		}
+	}
+	for name := range s.composeNames {
+		if name != "" {
+			seenNames[name] = true
+		}
+	}
+	if len(s.exclude) > 0 {
+		kept := make([]string, 0, len(dirs))
+		for _, dir := range dirs {
+			if s.exclude[s.byDir[dir].name] {
+				continue
+			}
+			kept = append(kept, dir)
+		}
+		dirs = kept
+	}
 	nameGaps := resolveNameCollisions(dirs, s.byDir, &s.warnings)
 
 	for _, cs := range s.compose {
@@ -88,6 +109,9 @@ func (s *scanner) result() Detected {
 		}
 	}
 
+	if s.opts.DiscoverCompose {
+		services, gaps = s.discoverCompose(services, gaps)
+	}
 	ports := map[int][]domain.ServiceName{}
 	for _, svc := range services {
 		if svc.MainPort == nil {
@@ -116,6 +140,14 @@ func (s *scanner) result() Detected {
 
 	env = dedupeEnv(env, &warnings)
 	copyFiles := s.copyFromMain(env, copySignals, &warnings)
+	if s.opts.DiscoverCompose && !s.composeSeen {
+		warnings = append(warnings, "no compose file found; compose discovery skipped")
+	}
+	for name := range s.exclude {
+		if !seenNames[name] {
+			warnings = append(warnings, "ignoring --exclude-service "+string(name)+": no matching service")
+		}
+	}
 	sortServices(services)
 	sortEnv(env)
 	sort.Strings(warnings)
@@ -405,4 +437,87 @@ func sortGaps(gaps []Gap) {
 		}
 		return gaps[i].Message < gaps[j].Message
 	})
+}
+
+func (s *scanner) discoverCompose(services []Service, gaps []Gap) ([]Service, []Gap) {
+	existing := make(map[domain.ServiceName]bool, len(services))
+	for _, svc := range services {
+		existing[svc.Name] = true
+	}
+	groups := map[domain.ServiceName][]composeSignal{}
+	order := make([]string, 0)
+	for _, cs := range s.compose {
+		if s.exclude[cs.name] {
+			continue
+		}
+		if _, ok := groups[cs.name]; !ok {
+			order = append(order, string(cs.name))
+		}
+		groups[cs.name] = append(groups[cs.name], cs)
+	}
+	sort.Strings(order)
+	for _, raw := range order {
+		name := domain.ServiceName(raw)
+		if !domain.ValidServiceName(raw) {
+			field := "services"
+			if raw != "" {
+				field = "services." + raw
+			}
+			gaps = append(gaps, Gap{
+				Field: field, Reason: "invalid",
+				Message: "compose service name does not normalize to a valid service name",
+				Flags:   []string{"--service <name>:<main>:<start>"},
+				Service: name,
+			})
+			continue
+		}
+		signals := groups[name]
+		sort.Slice(signals, func(i, j int) bool { return signals[i].source < signals[j].source })
+		rawNames := map[string]bool{}
+		for _, cs := range signals {
+			rawNames[cs.rawName] = true
+		}
+		if len(rawNames) > 1 {
+			names := make([]string, 0, len(rawNames))
+			for rawName := range rawNames {
+				names = append(names, rawName)
+			}
+			sort.Strings(names)
+			gaps = append(gaps, Gap{
+				Field: "services." + raw + ".name", Reason: "ambiguous",
+				Message: "compose services " + strings.Join(names, ", ") + " normalize to the same name",
+				Flags:   []string{"--exclude-service " + raw, "--service <name>:<main>:<start>"},
+				Service: name,
+			})
+			continue
+		}
+		if existing[name] {
+			continue
+		}
+		ports := map[int]string{}
+		for _, cs := range signals {
+			ports[cs.port] = cs.source
+		}
+		if len(ports) > 1 {
+			sources := make([]string, 0, len(ports))
+			for _, source := range ports {
+				sources = append(sources, source)
+			}
+			sort.Strings(sources)
+			gaps = append(gaps, Gap{
+				Field: "services." + raw + ".mainPort", Reason: "ambiguous",
+				Message: "conflicting compose ports in " + strings.Join(sources, ", "),
+				Flags:   []string{"--exclude-service " + raw, "--service " + raw + ":<main>:<start>"},
+				Service: name,
+			})
+			continue
+		}
+		signal := signals[0]
+		services = append(services, Service{
+			Name: name, Dir: signal.dir, NameSource: signal.nameSource,
+			MainPort: &Value{Value: strconv.Itoa(signal.port), Source: signal.source},
+		})
+		existing[name] = true
+	}
+	return services, gaps
 }

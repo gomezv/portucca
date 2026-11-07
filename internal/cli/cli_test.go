@@ -316,7 +316,7 @@ func TestCommandHelpSpecifics(t *testing.T) {
 		cmd  string
 		want []string
 	}{
-		{"init", []string{"--project", "--service", "--preset", "node-vite-nest", "next", "--force"}},
+		{"init", []string{"--project", "--service", "--preset", "node-vite-nest", "next", "--force", "--compose", "--exclude-service"}},
 		{"list", []string{"--all", "--project"}},
 		{"run", []string{"--service", "exec", "--json is not supported"}},
 		{"doctor", []string{"Exits 1"}},
@@ -535,7 +535,7 @@ func TestInitScanHelp(t *testing.T) {
 		t.Fatalf("exit = %d, want 0", code)
 	}
 	text := out.String()
-	for _, want := range []string{"--scan", "Compose JSON/YAML"} {
+	for _, want := range []string{"--scan", "--compose", "--exclude-service", "Compose JSON/YAML", "configured by hand"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help = %q, want %q", text, want)
 		}
@@ -550,4 +550,83 @@ func newGitWorktree(t *testing.T) string {
 		t.Fatalf("git init: %v: %s", err, out)
 	}
 	return dir
+}
+
+func TestInitComposeFlagValidation(t *testing.T) {
+	dir := newGitWorktree(t)
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"compose requires scan", []string{"init", "--json", "--worktree", dir, "--compose"}, "--compose requires --scan"},
+		{"exclude requires compose", []string{"init", "--json", "--worktree", dir, "--scan", "--exclude-service", "db"}, "--exclude-service requires --compose"},
+		{"exclude with service", []string{"init", "--json", "--worktree", dir, "--scan", "--compose", "--exclude-service", "db", "--service", "web:8080:8081"}, "--exclude-service cannot be combined with --service"},
+		{"invalid exclude", []string{"init", "--json", "--worktree", dir, "--scan", "--compose", "--exclude-service", "!!!"}, "invalid --exclude-service"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errb bytes.Buffer
+			code := Run(tc.args, &out, &errb)
+			if code != 2 {
+				t.Fatalf("exit = %d, want 2", code)
+			}
+			if !strings.Contains(out.String(), `"code": "usage"`) || !strings.Contains(out.String(), tc.want) {
+				t.Fatalf("out = %q, want usage %q", out.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestInitScanComposeDiscoversServices(t *testing.T) {
+	dir := newGitWorktree(t)
+	if err := os.WriteFile(filepath.Join(dir, "compose.yaml"), []byte("services:\n  web:\n    ports:\n      - \"4000:4000\"\n  db:\n    ports:\n      - \"5432:5432\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"init", "--scan", "--compose", "--exclude-service", "db", "--worktree", dir, "--json"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr = %s", code, errb.String())
+	}
+	var env struct {
+		Data struct {
+			Services map[string]struct {
+				MainPort int `json:"mainPort"`
+			} `json:"services"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if len(env.Data.Services) != 1 {
+		t.Fatalf("services = %+v, want only web", env.Data.Services)
+	}
+	if env.Data.Services["web"].MainPort != 4000 {
+		t.Fatalf("services = %+v, want web 4000", env.Data.Services)
+	}
+}
+
+func TestInitScanComposeExplicitWins(t *testing.T) {
+	dir := newGitWorktree(t)
+	if err := os.WriteFile(filepath.Join(dir, "compose.yaml"), []byte("services:\n  web:\n    ports:\n      - \"4000:4000\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"init", "--scan", "--compose", "--service", "web:9000:9001", "--worktree", dir, "--json"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr = %s", code, errb.String())
+	}
+	var env struct {
+		Data struct {
+			Services map[string]struct {
+				MainPort int `json:"mainPort"`
+			} `json:"services"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if env.Data.Services["web"].MainPort != 9000 {
+		t.Fatalf("services = %+v, want explicit web 9000", env.Data.Services)
+	}
 }

@@ -59,10 +59,16 @@ type Detected struct {
 }
 
 type Options struct {
-	Root         string
-	MainRoot     string
-	MaxEntries   int
-	MaxFileBytes int64
+	Root            string
+	MainRoot        string
+	MaxEntries      int
+	MaxFileBytes    int64
+	DiscoverCompose bool
+	ExcludeServices []string
+}
+
+func NormalizeServiceName(raw string) domain.ServiceName {
+	return domain.ServiceName(slugify(raw))
 }
 
 type TooLargeError struct {
@@ -81,9 +87,12 @@ type packageInfo struct {
 }
 
 type composeSignal struct {
-	name   domain.ServiceName
-	port   int
-	source string
+	name       domain.ServiceName
+	rawName    string
+	port       int
+	source     string
+	nameSource string
+	dir        string
 }
 
 type portSignal struct {
@@ -114,13 +123,16 @@ type candidate struct {
 }
 
 type scanner struct {
-	opts     Options
-	ctx      context.Context
-	byDir    map[string]*candidate
-	packages map[string]packageInfo
-	compose  []composeSignal
-	warnings []string
-	visited  int
+	opts         Options
+	ctx          context.Context
+	byDir        map[string]*candidate
+	packages     map[string]packageInfo
+	compose      []composeSignal
+	composeNames map[domain.ServiceName]bool
+	exclude      map[domain.ServiceName]bool
+	composeSeen  bool
+	warnings     []string
+	visited      int
 }
 
 func skipDir(name string) bool {

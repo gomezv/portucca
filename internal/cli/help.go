@@ -55,10 +55,12 @@ var commandHelpText = map[string]string{
 	"init": `portucca init — create portucca.json
 
 Usage:
-  portucca init [--scan] [--project <slug>] [--service <name:main:start>]... [flags]
+  portucca init [--scan] [--compose] [--exclude-service <name>]... [--project <slug>] [--service <name:main:start>]... [flags]
 
 Flags:
   --scan                 Detect services, ports and env from the repository
+  --compose              Discover services from Compose (requires --scan)
+  --exclude-service <name>  Skip a detected service (repeatable; requires --compose)
   --project <slug>       Project slug (required without --scan)
   --service <spec>       Service as name:mainPort:startPort (repeatable; required without --scan)
   --preset <name>        generic (default), node-vite-nest, or next
@@ -67,13 +69,15 @@ Flags:
 What it does:
   Writes portucca.json at the repository root after validating the project,
   services, ports and preset. With --scan, detects signals from package.json,
-  .env* and Compose JSON/YAML; explicit flags override detected values.
+  .env* and Compose JSON/YAML; --compose discovers services from Compose.
+  Explicit flags override detected values.
   It does not touch the claims registry.
 
 Examples:
   portucca init --project app --service web:5173:5174
   portucca init --scan
   portucca init --scan --project app --service api:3004:3005
+  portucca init --scan --compose --exclude-service db
 
 Notes:
   - Without --scan, --project and at least one --service are required.
@@ -90,6 +94,10 @@ Notes:
   - A worktree without portucca.json uses the main checkout's config; a
     worktree-local config overrides it. Run init in the main checkout to share
     a local, gitignored config.
+  - --compose requires --scan; --exclude-service requires --compose and
+    cannot be combined with --service.
+  - Discovered Compose services only get ports; env and bootstrap still come
+    from .env*/package.json or configured by hand in portucca.json.
 `,
 	"ensure": `portucca ensure — assign or reuse the worktree ports
 

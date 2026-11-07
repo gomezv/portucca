@@ -153,3 +153,49 @@ func TestInitScanUsesComposeYAML(t *testing.T) {
 		t.Fatalf("sources = %+v, want compose.yaml mainPort source", got.Scan.Sources)
 	}
 }
+
+func TestInitScanDiscoversComposeServices(t *testing.T) {
+	main := t.TempDir()
+	git(t, main, "init", "-q")
+	writeScanFile(t, main, "compose.yaml", "services:\n  web:\n    ports:\n      - \"4000:4000\"\n  db:\n    ports:\n      - \"5432:5432\"\n")
+	git(t, main, "add", ".")
+	git(t, main, "commit", "-qm", "init")
+
+	app := newApp(t, filepath.Join(t.TempDir(), "ports.json"))
+	got, err := app.Init(context.Background(), application.InitRequest{
+		Scan: true, Compose: true, ExcludeServices: []string{"db"}, Worktree: main,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadFile(filepath.Join(main, "portucca.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Services) != 1 {
+		t.Fatalf("services = %+v, want only web", cfg.Services)
+	}
+	web, ok := cfg.Services["web"]
+	if !ok || web.MainPort != 4000 || web.StartPort != 4001 {
+		t.Fatalf("services = %+v, want web 4000/4001", cfg.Services)
+	}
+	if _, ok := cfg.Services["db"]; ok {
+		t.Fatalf("services = %+v, want db excluded", cfg.Services)
+	}
+	if got.Scan == nil {
+		t.Fatal("scan result is nil")
+	}
+	foundName := false
+	foundPort := false
+	for _, source := range got.Scan.Sources {
+		if source.Field == "services.web.name" && source.Value == "web" && source.Source == "compose.yaml:services.web.name" {
+			foundName = true
+		}
+		if source.Field == "services.web.mainPort" && source.Value == "4000" && source.Source == "compose.yaml:services.web.ports" {
+			foundPort = true
+		}
+	}
+	if !foundName || !foundPort {
+		t.Fatalf("sources = %+v, want compose name and port sources", got.Scan.Sources)
+	}
+}

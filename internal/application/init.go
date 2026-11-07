@@ -18,13 +18,15 @@ import (
 )
 
 type InitRequest struct {
-	Project    string
-	Services   []string
-	Preset     string
-	Force      bool
-	Worktree   string
-	ConfigPath string
-	Scan       bool
+	Project         string
+	Services        []string
+	Preset          string
+	Force           bool
+	Worktree        string
+	ConfigPath      string
+	Scan            bool
+	Compose         bool
+	ExcludeServices []string
 }
 
 type InitResult struct {
@@ -156,7 +158,10 @@ func (a *App) initScan(ctx context.Context, c project.Context, req InitRequest) 
 	if a.Scanner == nil {
 		return InitResult{}, apperr.New("internal", "scan is not configured", "rebuild the binary")
 	}
-	detected, err := a.Scanner.Scan(ctx, scan.Options{Root: c.Root, MainRoot: c.MainRoot})
+	detected, err := a.Scanner.Scan(ctx, scan.Options{
+		Root: c.Root, MainRoot: c.MainRoot,
+		DiscoverCompose: req.Compose, ExcludeServices: req.ExcludeServices,
+	})
 	if err != nil {
 		var tooLarge *scan.TooLargeError
 		if errors.As(err, &tooLarge) {

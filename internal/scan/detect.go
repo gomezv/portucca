@@ -202,7 +202,18 @@ func (s *scanner) addCompose(rel string, services map[string][]json.RawMessage) 
 	}
 	sort.Strings(names)
 	for _, name := range names {
+		slug := NormalizeServiceName(name)
+		s.composeNames[slug] = true
+		if s.exclude[slug] {
+			continue
+		}
 		ports := services[name]
+		if len(ports) == 0 {
+			if s.opts.DiscoverCompose {
+				s.warn(fmt.Sprintf("ignoring %s: services.%s has no published ports", rel, name))
+			}
+			continue
+		}
 		port, ok := publishedPort(ports)
 		if !ok {
 			if len(ports) > 0 {
@@ -215,8 +226,10 @@ func (s *scanner) addCompose(rel string, services map[string][]json.RawMessage) 
 			continue
 		}
 		s.compose = append(s.compose, composeSignal{
-			name: domain.ServiceName(slugify(name)), port: port,
-			source: fmt.Sprintf("%s:services.%s.ports", rel, name),
+			name: slug, rawName: name, port: port,
+			source:     fmt.Sprintf("%s:services.%s.ports", rel, name),
+			nameSource: fmt.Sprintf("%s:services.%s.name", rel, name),
+			dir:        path.Dir(rel),
 		})
 	}
 }
@@ -360,6 +373,7 @@ func (s *scanner) detectFile(file, rel string) {
 	case isEnvName(path.Base(rel)):
 		s.readEnv(file, rel)
 	case isComposeName(path.Base(rel)):
+		s.composeSeen = true
 		s.readCompose(file, rel)
 	}
 }

@@ -165,6 +165,17 @@ Example env files such as `.env.example` are only a fallback for `mainPort` when
 determine every required value, it writes nothing and lists the gaps; add `--project` or
 `--service` to fill them. `--scan` and `--preset` are mutually exclusive.
 
+By default Compose only enriches detected services. For a Compose-only repository, enable
+service discovery explicitly:
+
+```bash
+portucca init --scan --compose --exclude-service db
+```
+
+Only services with exactly one published host port are discovered; `--exclude-service` skips
+infrastructure such as `db` or `redis`. Discovered services get ports only: `env` and
+`bootstrap` still come from `.env*`/`package.json` or configured by hand in `portucca.json`.
+
 `portucca init` writes the file; `git add` and `git commit` are ordinary Git, not portucca
 commands. Commit it once so worktrees created from this branch include it. You do not repeat
 this for each worktree.

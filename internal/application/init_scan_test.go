@@ -304,3 +304,41 @@ func hasSource(sources []ScanSource, field, value, source string) bool {
 	}
 	return false
 }
+
+type captureScanner struct {
+	det  scan.Detected
+	opts scan.Options
+}
+
+func (c *captureScanner) Scan(_ context.Context, opts scan.Options) (scan.Detected, error) {
+	c.opts = opts
+	return c.det, nil
+}
+
+func TestInitScanPassesComposeOptions(t *testing.T) {
+	det := scan.Detected{
+		Project: &scan.Value{Value: "app", Source: "directory"},
+		Services: []scan.Service{{
+			Name: "web", Dir: ".", NameSource: "compose.yaml:services.web.name",
+			MainPort: &scan.Value{Value: "4000", Source: "compose.yaml:services.web.ports"},
+		}},
+	}
+	app, dir := scanApp(t, scan.Detected{})
+	capture := &captureScanner{det: det}
+	app.Scanner = capture
+	got, err := app.Init(context.Background(), InitRequest{
+		Scan: true, Compose: true, ExcludeServices: []string{"db"}, Worktree: dir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !capture.opts.DiscoverCompose {
+		t.Fatalf("opts = %+v, want DiscoverCompose", capture.opts)
+	}
+	if len(capture.opts.ExcludeServices) != 1 || capture.opts.ExcludeServices[0] != "db" {
+		t.Fatalf("opts = %+v, want exclude db", capture.opts)
+	}
+	if got.Services["web"].MainPort != 4000 {
+		t.Fatalf("services = %+v, want web 4000", got.Services)
+	}
+}

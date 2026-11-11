@@ -27,7 +27,7 @@ Commands:
   ensure      Assign or reuse the worktree ports
   setup       Bootstrap the worktree and ensure ports
   reallocate  Move this worktree to new ports
-  prune       Remove claims for deleted worktrees
+  prune       Remove claims and main reservations for deleted paths
   doctor      Read-only diagnostics
   env         Print resolved ports and env values
   list        List claims
@@ -165,7 +165,7 @@ Notes:
   - This is the only command that changes an existing worktree URL.
   - It fails in the main checkout with main_reserved.
 `,
-	"prune": `portucca prune — remove claims for deleted worktrees
+	"prune": `portucca prune — remove claims and main reservations for deleted paths
 
 Usage:
   portucca prune [flags]

@@ -631,3 +631,21 @@ func TestInitScanComposeExplicitWins(t *testing.T) {
 		t.Fatalf("services = %+v, want explicit web 9000", env.Data.Services)
 	}
 }
+
+func TestPruneHumanOutputReportsMains(t *testing.T) {
+	dir := t.TempDir()
+	reg := filepath.Join(dir, "ports.json")
+	dead := filepath.Join(dir, "gone")
+	raw := `{"version":2,"worktrees":[],"mains":[{"project":"app","path":"` + dead + `","ports":{"web":18080},"updatedAt":"2026-11-10T00:00:00Z"}]}`
+	if err := os.WriteFile(reg, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"prune", "--registry", reg}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, out=%s err=%s", code, out.String(), errb.String())
+	}
+	if !strings.Contains(out.String(), "removed: 0 mains: 1") {
+		t.Fatalf("output = %q, want removed and mains counts", out.String())
+	}
+}

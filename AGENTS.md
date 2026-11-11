@@ -19,7 +19,7 @@ Rules for working in this repository.
 
 - Portucca does not create worktrees, install dependencies, run builds, or supervise processes.
 - `portucca run` only execs an explicit command with the resolved environment.
-- The claims registry is per user (one registry per OS user, not per machine); port ranges
+- The registry is per user (one registry per OS user, not per machine); port ranges
   live in `portucca.json` inside the repository.
 - The main checkout publishes its reserved ports to the registry but never receives claims
   or env writes.

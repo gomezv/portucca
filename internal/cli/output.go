@@ -83,7 +83,7 @@ func writeHuman(w io.Writer, cmd string, data any, err error) {
 			fmt.Fprintf(w, "%s %s live=%v %v\n", c.Project, c.Path, c.Live, c.Services)
 		}
 	case application.PruneResult:
-		fmt.Fprintf(w, "removed: %d\n", len(v.Removed))
+		fmt.Fprintf(w, "removed: %d mains: %d\n", len(v.Removed), len(v.RemovedMains))
 	case application.DoctorResult:
 		fmt.Fprintf(w, "ok: %v errors=%d warnings=%d\n", v.OK, len(v.Errors), len(v.Warnings))
 		for _, e := range v.Errors {

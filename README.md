@@ -39,14 +39,14 @@ instead of silently moving to another port).
 
 | Problem | What portucca does |
 |---|---|
-| Two worktrees request the same port | Allocates ports per worktree with a single per-user claims registry and locking (`flock`) |
+| Two worktrees request the same port | Allocates ports per worktree with a single per-user registry (claims and main reservations) and locking (`flock`) |
 | The port changes on every start | The claim follows the worktree **directory**: if the stack stops and starts again, the URL stays the same |
 | A new worktree does not start | Declarative bootstrap: copies files from the main checkout and creates symlinks |
 | Ports already exist in env files | `adoptFrom` registers the existing port without binding or tearing down the stack |
-| Two projects of the same user collide | A single per-user registry with claims tagged by project |
-| The main checkout receives writes | The main checkout has reserved ports and never enters the registry |
+| Two projects of the same user collide | A single per-user registry with worktree claims and main reservations, tagged by project |
+| The main checkout receives writes | The main checkout publishes its reserved ports to the registry, but never receives claims or env writes |
 
-The claims registry is per user: two OS users on the same machine keep separate registries, so
+The registry is per user: two OS users on the same machine keep separate registries, so
 cross-user collisions are outside v1 and must be avoided with distinct port ranges.
 
 Portucca is language-agnostic: it works with N services per project and assumes neither a
@@ -77,7 +77,8 @@ framework nor a specific `.env` layout.
    the worktree path, and writes the values to the configured env files. The claim survives
    restarts and is released on the next `ensure` or `prune` after the worktree directory is
    deleted.
-4. The main checkout keeps its reserved `mainPort` values and never receives claims or writes.
+4. The main checkout publishes its reserved `mainPort` values to the registry; it never
+   receives claims or env writes.
 5. `doctor`, `env`, and `list` are read-only. The registry lives in
    `$XDG_STATE_HOME/portucca/ports.json` (or `~/.local/state/portucca/ports.json`) and is
    protected by an exclusive `flock`.
@@ -174,7 +175,13 @@ portucca init --scan --compose --exclude-service db
 
 Only services with exactly one published host port are discovered; `--exclude-service` skips
 infrastructure such as `db` or `redis`. Discovered services get ports only: `env` and
-`bootstrap` still come from `.env*`/`package.json` or configured by hand in `portucca.json`.
+`bootstrap` still come from `.env*`/`package.json` or are configured by hand in
+`portucca.json`.
+
+`--exclude-service` filters detection only: it does not reserve the excluded service's
+published ports. If one of those ports falls inside your band, omit `--compose` (and
+`--exclude-service`) and declare the services with explicit `--service` ports; Compose still
+enriches candidates with the same name.
 
 `portucca init` writes the file; `git add` and `git commit` are ordinary Git, not portucca
 commands. Commit it once so worktrees created from this branch include it. You do not repeat

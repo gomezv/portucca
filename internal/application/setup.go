@@ -32,8 +32,12 @@ func (a *App) Setup(ctx context.Context, worktree string) (SetupResult, error) {
 
 func (a *App) setupFrom(ctx context.Context, c project.Context, cfg domain.Config, cfgPath string) (SetupResult, error) {
 	if c.IsMain {
+		ensure, err := a.ensureMain(c, cfg, cfgPath)
+		if err != nil {
+			return SetupResult{}, err
+		}
 		return SetupResult{
-			EnsureResult: mainEnsureResult(c, cfg, cfgPath),
+			EnsureResult: ensure,
 			Bootstrap:    BootstrapResult{Copied: []string{}, Symlinked: []string{}, Skipped: []string{}},
 		}, nil
 	}

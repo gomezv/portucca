@@ -36,7 +36,11 @@ func DefaultPath() (string, error) {
 func (s Store) Load() (domain.Registry, error) {
 	data, err := os.ReadFile(s.Path)
 	if errors.Is(err, os.ErrNotExist) {
-		return domain.Registry{Version: domain.RegistryVersion}, nil
+		return domain.Registry{
+			Version:   domain.RegistryVersion,
+			Worktrees: []domain.Claim{},
+			Mains:     []domain.MainReservation{},
+		}, nil
 	}
 	if err != nil {
 		return domain.Registry{}, err
@@ -64,8 +68,22 @@ func (s Store) Load() (domain.Registry, error) {
 		}
 		return domain.Registry{}, fmt.Errorf("%w: %w", ErrCorrupt, err)
 	}
-	if reg.Version != domain.RegistryVersion {
+	if reg.Version != 1 && reg.Version != 2 {
 		return domain.Registry{}, fmt.Errorf("%w: %d", ErrVersion, reg.Version)
+	}
+	if reg.Version == 1 {
+		if _, ok := top["mains"]; ok {
+			return domain.Registry{}, fmt.Errorf("%w: mains not allowed in version 1", ErrCorrupt)
+		}
+		reg.Mains = []domain.MainReservation{}
+	} else {
+		rawMains, ok := top["mains"]
+		if !ok || bytes.Equal(bytes.TrimSpace(rawMains), []byte("null")) {
+			return domain.Registry{}, fmt.Errorf("%w: missing mains", ErrCorrupt)
+		}
+		if reg.Mains == nil {
+			reg.Mains = []domain.MainReservation{}
+		}
 	}
 	for _, claim := range reg.Worktrees {
 		if claim.Project == "" || claim.Path == "" || len(claim.Services) == 0 {
@@ -77,6 +95,16 @@ func (s Store) Load() (domain.Registry, error) {
 			}
 		}
 	}
+	for _, main := range reg.Mains {
+		if main.Project == "" || main.Path == "" || len(main.Ports) == 0 {
+			return domain.Registry{}, fmt.Errorf("%w: incomplete main reservation", ErrCorrupt)
+		}
+		for name, port := range main.Ports {
+			if name == "" || !port.Valid() {
+				return domain.Registry{}, fmt.Errorf("%w: invalid main port", ErrCorrupt)
+			}
+		}
+	}
 	return reg, nil
 }
 
@@ -85,17 +113,32 @@ func (s Store) Save(reg domain.Registry) error {
 	if reg.Worktrees == nil {
 		reg.Worktrees = []domain.Claim{}
 	}
+	if reg.Mains == nil {
+		reg.Mains = []domain.MainReservation{}
+	}
 	claims := make([]domain.Claim, len(reg.Worktrees))
 	copy(claims, reg.Worktrees)
 	reg.Worktrees = claims
+	mains := make([]domain.MainReservation, len(reg.Mains))
+	copy(mains, reg.Mains)
+	reg.Mains = mains
 	for i := range reg.Worktrees {
 		reg.Worktrees[i].UpdatedAt = reg.Worktrees[i].UpdatedAt.UTC()
+	}
+	for i := range reg.Mains {
+		reg.Mains[i].UpdatedAt = reg.Mains[i].UpdatedAt.UTC()
 	}
 	sort.Slice(reg.Worktrees, func(i, j int) bool {
 		if reg.Worktrees[i].Project != reg.Worktrees[j].Project {
 			return reg.Worktrees[i].Project < reg.Worktrees[j].Project
 		}
 		return reg.Worktrees[i].Path < reg.Worktrees[j].Path
+	})
+	sort.Slice(reg.Mains, func(i, j int) bool {
+		if reg.Mains[i].Project != reg.Mains[j].Project {
+			return reg.Mains[i].Project < reg.Mains[j].Project
+		}
+		return reg.Mains[i].Path < reg.Mains[j].Path
 	})
 	data, err := json.MarshalIndent(reg, "", "  ")
 	if err != nil {

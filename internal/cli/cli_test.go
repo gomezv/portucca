@@ -535,7 +535,7 @@ func TestInitScanHelp(t *testing.T) {
 		t.Fatalf("exit = %d, want 0", code)
 	}
 	text := out.String()
-	for _, want := range []string{"--scan", "--compose", "--exclude-service", "Compose JSON/YAML", "configured by hand"} {
+	for _, want := range []string{"--scan", "--compose", "--exclude-service", "Compose JSON/YAML", "configured by hand", "does not reserve"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help = %q, want %q", text, want)
 		}
@@ -563,6 +563,7 @@ func TestInitComposeFlagValidation(t *testing.T) {
 		{"exclude requires compose", []string{"init", "--json", "--worktree", dir, "--scan", "--exclude-service", "db"}, "--exclude-service requires --compose"},
 		{"exclude with service", []string{"init", "--json", "--worktree", dir, "--scan", "--compose", "--exclude-service", "db", "--service", "web:8080:8081"}, "--exclude-service cannot be combined with --service"},
 		{"invalid exclude", []string{"init", "--json", "--worktree", dir, "--scan", "--compose", "--exclude-service", "!!!"}, "invalid --exclude-service"},
+		{"empty exclude", []string{"init", "--json", "--worktree", dir, "--scan", "--compose", "--exclude-service", ""}, "invalid --exclude-service"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

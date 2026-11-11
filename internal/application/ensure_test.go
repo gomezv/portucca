@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gomezv/portucca/internal/apperr"
 	"github.com/gomezv/portucca/internal/domain"
 	"github.com/gomezv/portucca/internal/project"
 )
@@ -29,12 +30,17 @@ func (f fakeConfig) LoadRoot(string) (domain.Config, string, error) {
 func (f fakeConfig) LoadFile(string) (domain.Config, error) { return f.cfg, f.err }
 
 type fakeRegistry struct {
-	reg   domain.Registry
-	saves int
+	reg     domain.Registry
+	saves   int
+	saveErr error
 }
 
 func (f *fakeRegistry) Load() (domain.Registry, error) { return f.reg, nil }
 func (f *fakeRegistry) Save(reg domain.Registry) error {
+	if f.saveErr != nil {
+		f.saves++
+		return f.saveErr
+	}
 	f.reg = reg
 	f.saves++
 	return nil
@@ -122,7 +128,8 @@ func TestEnsureAllocatesInWorktree(t *testing.T) {
 	}
 }
 
-func TestEnsureMainDoesNotWrite(t *testing.T) {
+func TestEnsureMainRegistersReservation(t *testing.T) {
+	main := t.TempDir()
 	cfg := domain.Config{
 		Version: 1,
 		Project: "app",
@@ -130,18 +137,79 @@ func TestEnsureMainDoesNotWrite(t *testing.T) {
 			"web": {MainPort: 3000, StartPort: 3001},
 		},
 	}
-	reg := &fakeRegistry{reg: domain.Registry{Version: 1}}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
 	env := &fakeEnv{}
-	app := testApp(fakeLocator{ctx: project.Context{Root: "/repo", MainRoot: "/repo", IsMain: true}}, cfg, reg, env)
-	got, err := app.Ensure(context.Background(), "/repo")
+	app := testApp(fakeLocator{ctx: project.Context{Root: main, MainRoot: main, IsMain: true}}, cfg, reg, env)
+	got, err := app.Ensure(context.Background(), main)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.IsMain || got.Changed || got.Services["web"].Port != 3000 {
+	if !got.IsMain || !got.Changed || got.Services["web"].Port != 3000 {
 		t.Fatalf("got = %+v", got)
 	}
-	if reg.saves != 0 || len(env.files) != 0 {
-		t.Fatalf("main wrote: saves=%d env=%+v", reg.saves, env.files)
+	if len(reg.reg.Mains) != 1 || reg.reg.Mains[0].Path != main || reg.reg.Mains[0].Ports["web"] != 3000 {
+		t.Fatalf("mains = %+v", reg.reg.Mains)
+	}
+	if len(reg.reg.Worktrees) != 0 || len(env.files) != 0 {
+		t.Fatalf("main wrote env or claim: worktrees=%+v env=%+v", reg.reg.Worktrees, env.files)
+	}
+	got, err = app.Ensure(context.Background(), main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Changed {
+		t.Fatalf("second run changed: %+v", got)
+	}
+}
+
+func TestEnsureWorktreeSkipsReservedMainPort(t *testing.T) {
+	worktree := t.TempDir()
+	otherMain := t.TempDir()
+	cfg := domain.Config{
+		Version: 1,
+		Project: "proj-b",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 2999, StartPort: 3000},
+		},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{{
+		Project: "proj-a", Path: otherMain, Ports: map[domain.ServiceName]domain.Port{"web": 3000},
+	}}}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: worktree, MainRoot: worktree}}, cfg, reg, &fakeEnv{})
+	got, err := app.Ensure(context.Background(), worktree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Services["web"].Port != 3001 {
+		t.Fatalf("port = %d, want 3001 (skip reserved 3000)", got.Services["web"].Port)
+	}
+}
+
+func TestEnsureFailsClaimOnReservedMainPort(t *testing.T) {
+	worktree := t.TempDir()
+	otherMain := t.TempDir()
+	cfg := domain.Config{
+		Version: 1,
+		Project: "proj-b",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 2999, StartPort: 3000},
+		},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version: 2,
+		Worktrees: []domain.Claim{{
+			Project: "proj-b", Path: worktree,
+			Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3000}},
+		}},
+		Mains: []domain.MainReservation{{
+			Project: "proj-a", Path: otherMain, Ports: map[domain.ServiceName]domain.Port{"web": 3000},
+		}},
+	}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: worktree, MainRoot: worktree}}, cfg, reg, &fakeEnv{})
+	_, err := app.Ensure(context.Background(), worktree)
+	ae, ok := apperr.As(err)
+	if !ok || ae.Code != "duplicate_claim" {
+		t.Fatalf("err = %v, want duplicate_claim", err)
 	}
 }
 

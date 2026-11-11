@@ -342,3 +342,51 @@ func TestInitScanPassesComposeOptions(t *testing.T) {
 		t.Fatalf("services = %+v, want web 4000", got.Services)
 	}
 }
+
+func TestInitScanRootOrchestratorWithoutCompose(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("package.json", `{"name":"orchestrator","scripts":{"dev":"npm run dev --workspaces"}}`)
+	write("compose.yaml", "services:\n  web:\n    ports:\n      - \"4000:4000\"\n")
+	app := &App{
+		Locator:  fakeLocator{ctx: project.Context{Root: dir, MainRoot: dir}},
+		Config:   config.Loader{},
+		Registry: &fakeRegistry{reg: domain.Registry{Version: 1}},
+		Locker:   fakeLocker{},
+		Scanner:  scan.Scanner{},
+	}
+	_, err := app.Init(context.Background(), InitRequest{Scan: true, Worktree: dir})
+	ae, ok := apperr.As(err)
+	if !ok || ae.Code != "scan_incomplete" {
+		t.Fatalf("err = %v, want scan_incomplete", err)
+	}
+	gaps, ok := ae.Details["gaps"].([]scan.Gap)
+	if !ok || len(gaps) == 0 || gaps[0].Field != "services.orchestrator.mainPort" {
+		t.Fatalf("details = %+v, want services.orchestrator.mainPort gap", ae.Details)
+	}
+}
+
+func TestInitScanMainRegistersReservation(t *testing.T) {
+	det := scan.Detected{
+		Project: &scan.Value{Value: "app", Source: "directory"},
+		Services: []scan.Service{{
+			Name: "web", Dir: ".", NameSource: "directory",
+			MainPort: &scan.Value{Value: "8080", Source: ".env:PORT"},
+		}},
+	}
+	app, dir := scanApp(t, det)
+	app.Locator = fakeLocator{ctx: project.Context{Root: dir, MainRoot: dir, IsMain: true}}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
+	app.Registry = reg
+	if _, err := app.Init(context.Background(), InitRequest{Scan: true, Worktree: dir}); err != nil {
+		t.Fatal(err)
+	}
+	if len(reg.reg.Mains) != 1 || reg.reg.Mains[0].Path != dir || reg.reg.Mains[0].Ports["web"] != 8080 {
+		t.Fatalf("mains = %+v", reg.reg.Mains)
+	}
+}

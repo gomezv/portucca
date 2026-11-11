@@ -233,3 +233,54 @@ func TestScanComposeDiscoveryWithoutComposeFileWarns(t *testing.T) {
 		t.Fatalf("warnings = %+v, want no-compose warning", got.Warnings)
 	}
 }
+
+func TestScanComposeDiscoveryTreatsRootOrchestratorAsOrchestrator(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "package.json", `{"name":"orchestrator","scripts":{"dev":"npm run dev --workspaces"}}`)
+	writeFile(t, root, "compose.yaml", "services:\n  web:\n    ports:\n      - \"4000:4000\"\n  api:\n    ports:\n      - \"4001:4001\"\n")
+
+	got, err := Scan(context.Background(), Options{Root: root, MainRoot: root, DiscoverCompose: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Gaps) != 0 {
+		t.Fatalf("gaps = %+v, want none", got.Gaps)
+	}
+	if len(got.Services) != 2 || got.Services[0].Name != "api" || got.Services[1].Name != "web" {
+		t.Fatalf("services = %+v, want api and web", got.Services)
+	}
+}
+
+func TestScanComposeDiscoveryKeepsRootMatchingComposeService(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "package.json", `{"name":"web","scripts":{"dev":"vite"}}`)
+	writeFile(t, root, "compose.yaml", "services:\n  web:\n    ports:\n      - \"4000:4000\"\n")
+
+	got, err := Scan(context.Background(), Options{Root: root, MainRoot: root, DiscoverCompose: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Gaps) != 0 || len(got.Services) != 1 || got.Services[0].Name != "web" {
+		t.Fatalf("services = %+v gaps = %+v, want only web without gaps", got.Services, got.Gaps)
+	}
+	if got.Services[0].MainPort == nil || got.Services[0].MainPort.Value != "4000" {
+		t.Fatalf("mainPort = %+v, want compose 4000", got.Services[0].MainPort)
+	}
+}
+
+func TestScanComposeDiscoveryRootOrchestratorWithoutCompose(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "package.json", `{"name":"orchestrator","scripts":{"dev":"npm run dev --workspaces"}}`)
+	writeFile(t, root, "compose.yaml", "services:\n  web:\n    ports:\n      - \"4000:4000\"\n")
+
+	got, err := Scan(context.Background(), Options{Root: root, MainRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Gaps) != 0 {
+		t.Fatalf("gaps = %+v, want none at scan level", got.Gaps)
+	}
+	if len(got.Services) != 1 || got.Services[0].Name != "orchestrator" || got.Services[0].MainPort != nil {
+		t.Fatalf("services = %+v, want root orchestrator without mainPort", got.Services)
+	}
+}

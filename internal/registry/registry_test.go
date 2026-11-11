@@ -35,6 +35,12 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 			},
 			UpdatedAt: time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC),
 		}},
+		Mains: []domain.MainReservation{{
+			Project:   "app",
+			Path:      "/main",
+			Ports:     map[domain.ServiceName]domain.Port{"web": 5173},
+			UpdatedAt: time.Date(2026, 11, 10, 0, 0, 0, 0, time.UTC),
+		}},
 	}
 	if err := store.Save(in); err != nil {
 		t.Fatal(err)
@@ -44,7 +50,10 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(out.Worktrees) != 1 || out.Worktrees[0].Services["web"].Port != 5174 {
-		t.Fatalf("out = %+v", out)
+		t.Fatalf("worktrees = %+v", out.Worktrees)
+	}
+	if len(out.Mains) != 1 || out.Mains[0].Ports["web"] != 5173 {
+		t.Fatalf("mains = %+v", out.Mains)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -80,12 +89,98 @@ func TestDefaultPathUsesXDG(t *testing.T) {
 
 func TestLoadVersionMismatchFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ports.json")
-	if err := os.WriteFile(path, []byte(`{"version":2,"worktrees":[]}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"version":3,"worktrees":[],"mains":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, err := (Store{Path: path}).Load()
 	if !errors.Is(err, ErrVersion) {
 		t.Fatalf("err = %v, want ErrVersion", err)
+	}
+}
+
+func TestLoadVersionOneNormalizesMains(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"worktrees":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := (Store{Path: path}).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reg.Version != 1 || reg.Mains == nil || len(reg.Mains) != 0 {
+		t.Fatalf("registry = %+v", reg)
+	}
+}
+
+func TestLoadVersionTwoRequiresMains(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(path, []byte(`{"version":2,"worktrees":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Store{Path: path}).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestLoadVersionOneRejectsMains(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"worktrees":[],"mains":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Store{Path: path}).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestLoadRejectsNullMains(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	if err := os.WriteFile(path, []byte(`{"version":2,"worktrees":[],"mains":null}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Store{Path: path}).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestLoadRejectsInvalidMainReservation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	raw := `{"version":2,"worktrees":[],"mains":[{"project":"","path":"/main","ports":{"web":5173}}]}`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (Store{Path: path}).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestSaveSortsMains(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ports.json")
+	in := domain.Registry{Mains: []domain.MainReservation{
+		{Project: "beta", Path: "/b", Ports: map[domain.ServiceName]domain.Port{"web": 5002}},
+		{Project: "alpha", Path: "/z", Ports: map[domain.ServiceName]domain.Port{"web": 5003}},
+		{Project: "alpha", Path: "/a", Ports: map[domain.ServiceName]domain.Port{"web": 5004}},
+	}}
+	if err := (Store{Path: path}).Save(in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := (Store{Path: path}).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{
+		string(out.Mains[0].Project) + " " + out.Mains[0].Path,
+		string(out.Mains[1].Project) + " " + out.Mains[1].Path,
+		string(out.Mains[2].Project) + " " + out.Mains[2].Path,
+	}
+	want := []string{"alpha /a", "alpha /z", "beta /b"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order = %v, want %v", got, want)
+		}
 	}
 }
 
@@ -174,7 +269,7 @@ func TestSaveReplacesLoosePermissions(t *testing.T) {
 	}
 }
 
-func TestSaveWritesVersionOne(t *testing.T) {
+func TestSaveWritesVersionTwo(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ports.json")
 	if err := (Store{Path: path}).Save(domain.Registry{}); err != nil {
 		t.Fatal(err)
@@ -183,12 +278,15 @@ func TestSaveWritesVersionOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var raw map[string]any
+	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatal(err)
 	}
-	if raw["version"] != float64(domain.RegistryVersion) {
-		t.Fatalf("version = %v", raw["version"])
+	if got := string(raw["version"]); got != "2" {
+		t.Fatalf("version = %s, want 2", got)
+	}
+	if _, ok := raw["mains"]; !ok {
+		t.Fatal("mains missing")
 	}
 }
 
@@ -236,7 +334,7 @@ func TestLoadEmptyWorktreesSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reg.Version != domain.RegistryVersion || len(reg.Worktrees) != 0 {
+	if reg.Version != 1 || len(reg.Worktrees) != 0 || len(reg.Mains) != 0 {
 		t.Fatalf("registry = %+v", reg)
 	}
 }
@@ -290,6 +388,9 @@ func TestSaveEmptyWritesArray(t *testing.T) {
 	}
 	if got := string(raw["worktrees"]); got != "[]" {
 		t.Fatalf("worktrees = %s, want []", got)
+	}
+	if got := string(raw["mains"]); got != "[]" {
+		t.Fatalf("mains = %s, want []", got)
 	}
 }
 

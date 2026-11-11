@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The registry is now version 2 and records the main checkout's reserved ports (`mains`).
+  `init`, `ensure`, `setup`, and `run` in the main checkout publish those reservations, so a
+  worktree of another project no longer takes a stopped main's ports. Version 1 registries
+  are accepted and upgraded on the next write; run `ensure` once per main checkout after
+  upgrading.
+
+### Fixed
+
+- `portucca init --scan --compose` no longer treats a root `package.json` without a port as a
+  service when Compose discovers services. `--exclude-service` filters detection only and
+  does not reserve the excluded service's published ports.
+
 ## [0.3.0] - 2026-11-07
 
 ### Added

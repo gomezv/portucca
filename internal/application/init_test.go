@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -246,6 +247,68 @@ func TestInitRejectsNodeViteNestWithoutRequiredServices(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "portucca.json")); !os.IsNotExist(err) {
 		t.Fatalf("invalid config was written: %v", err)
+	}
+}
+
+func TestInitMainRegistersReservation(t *testing.T) {
+	dir := t.TempDir()
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
+	app := &App{
+		Locator:  fakeLocator{ctx: project.Context{Root: dir, MainRoot: dir, IsMain: true}},
+		Config:   config.Loader{},
+		Registry: reg,
+		Locker:   fakeLocker{},
+	}
+	if _, err := app.Init(context.Background(), InitRequest{
+		Project: "app", Services: []string{"web:8080:8081"}, Worktree: dir,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(reg.reg.Mains) != 1 || reg.reg.Mains[0].Path != dir || reg.reg.Mains[0].Ports["web"] != 8080 {
+		t.Fatalf("mains = %+v", reg.reg.Mains)
+	}
+}
+
+func TestInitWorktreeDoesNotRegisterMain(t *testing.T) {
+	dir := t.TempDir()
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
+	app := &App{
+		Locator:  fakeLocator{ctx: project.Context{Root: dir}},
+		Config:   config.Loader{},
+		Registry: reg,
+		Locker:   fakeLocker{},
+	}
+	if _, err := app.Init(context.Background(), InitRequest{
+		Project: "app", Services: []string{"web:8080:8081"}, Worktree: dir,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(reg.reg.Mains) != 0 || reg.saves != 0 {
+		t.Fatalf("worktree init touched the registry: mains=%+v saves=%d", reg.reg.Mains, reg.saves)
+	}
+}
+
+func TestInitMainRegistryWriteFails(t *testing.T) {
+	dir := t.TempDir()
+	reg := &fakeRegistry{
+		reg:     domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}},
+		saveErr: errors.New("disk full"),
+	}
+	app := &App{
+		Locator:  fakeLocator{ctx: project.Context{Root: dir, MainRoot: dir, IsMain: true}},
+		Config:   config.Loader{},
+		Registry: reg,
+		Locker:   fakeLocker{},
+	}
+	_, err := app.Init(context.Background(), InitRequest{
+		Project: "app", Services: []string{"web:8080:8081"}, Worktree: dir,
+	})
+	ae, ok := apperr.As(err)
+	if !ok || !strings.Contains(ae.Hint, "ensure") {
+		t.Fatalf("err = %v, want hint pointing to ensure", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "portucca.json")); statErr != nil {
+		t.Fatalf("config was not written: %v", statErr)
 	}
 }
 

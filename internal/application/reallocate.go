@@ -30,7 +30,7 @@ func (a *App) Reallocate(ctx context.Context, worktree string) (EnsureResult, er
 	if err != nil {
 		return EnsureResult{}, mapRegistryErr(err)
 	}
-	reg, _ = pruneStale(reg, os.Stat)
+	reg, _, _ = pruneStale(reg, os.Stat)
 	own := findClaim(reg, c.Root)
 	if own == nil {
 		return EnsureResult{}, apperr.New("no_claim", "this worktree has no claim", "run portucca ensure first")
@@ -44,7 +44,7 @@ func (a *App) Reallocate(ctx context.Context, worktree string) (EnsureResult, er
 	}
 	res, err := allocation.Plan(allocation.Request{
 		Config:   cfg,
-		Occupied: occupiedWithMainPorts(cfg, reg, c.Root),
+		Occupied: occupiedWithReservations(cfg, reg, c.Root),
 		Exclude:  exclude,
 		Prober:   a.Prober,
 	})

@@ -414,7 +414,135 @@ func TestDoctorReportsProjectErrorCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Warnings) != 1 || got.Warnings[0].Code != "git_missing" {
+	if !hasIssueCode(got.Warnings, "git_missing") {
 		t.Fatalf("warnings = %+v, want git_missing", got.Warnings)
+	}
+}
+
+func hasIssueCode(issues []Issue, code string) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func TestDoctorReportsStaleMain(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "gone-main")
+	cfg := domain.Config{
+		Version: 1, Project: "app",
+		Services: map[domain.ServiceName]domain.Service{"web": {MainPort: 3000, StartPort: 3001}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version:   2,
+		Worktrees: []domain.Claim{},
+		Mains: []domain.MainReservation{{
+			Project: "app", Path: missing, Ports: map[domain.ServiceName]domain.Port{"web": 3000},
+		}},
+	}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root}}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.OK || !hasIssueCode(got.Errors, "stale_main") {
+		t.Fatalf("errors = %+v, want stale_main", got.Errors)
+	}
+	if len(got.Mains) != 1 || got.Mains[0].Live {
+		t.Fatalf("mains = %+v", got.Mains)
+	}
+	if reg.saves != 0 {
+		t.Fatalf("doctor wrote the registry: saves=%d", reg.saves)
+	}
+}
+
+func TestDoctorReportsClaimOnReservedMainPort(t *testing.T) {
+	root := t.TempDir()
+	otherMain := t.TempDir()
+	cfg := domain.Config{
+		Version: 1, Project: "proj-b",
+		Services: map[domain.ServiceName]domain.Service{"web": {MainPort: 2999, StartPort: 3000}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version: 2,
+		Worktrees: []domain.Claim{{
+			Project: "proj-b", Path: root,
+			Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3000}},
+		}},
+		Mains: []domain.MainReservation{{
+			Project: "proj-a", Path: otherMain, Ports: map[domain.ServiceName]domain.Port{"web": 3000},
+		}},
+	}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root}}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.OK || !hasIssueCode(got.Errors, "main_port_claimed") {
+		t.Fatalf("errors = %+v, want main_port_claimed", got.Errors)
+	}
+}
+
+func TestDoctorReportsMainPortConflict(t *testing.T) {
+	root := t.TempDir()
+	mainA := t.TempDir()
+	mainB := t.TempDir()
+	cfg := domain.Config{
+		Version: 1, Project: "app",
+		Services: map[domain.ServiceName]domain.Service{"web": {MainPort: 3100, StartPort: 3101}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version:   2,
+		Worktrees: []domain.Claim{},
+		Mains: []domain.MainReservation{
+			{Project: "proj-a", Path: mainA, Ports: map[domain.ServiceName]domain.Port{"web": 4000}},
+			{Project: "proj-b", Path: mainB, Ports: map[domain.ServiceName]domain.Port{"web": 4000}},
+		},
+	}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root}}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.OK || !hasIssueCode(got.Errors, "main_port_conflict") {
+		t.Fatalf("errors = %+v, want main_port_conflict", got.Errors)
+	}
+}
+
+func TestDoctorReportsMissingMainReservation(t *testing.T) {
+	root := t.TempDir()
+	cfg := domain.Config{
+		Version: 1, Project: "app",
+		Services: map[domain.ServiceName]domain.Service{"web": {MainPort: 3000, StartPort: 3001}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{},
+	}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root, IsMain: true}}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasIssueCode(got.Warnings, "main_reservation_missing") {
+		t.Fatalf("warnings = %+v, want main_reservation_missing", got.Warnings)
+	}
+}
+
+func TestDoctorReportsRegistryV1(t *testing.T) {
+	root := t.TempDir()
+	cfg := domain.Config{
+		Version: 1, Project: "app",
+		Services: map[domain.ServiceName]domain.Service{"web": {MainPort: 3000, StartPort: 3001}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 1}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root}}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasIssueCode(got.Warnings, "registry_v1") {
+		t.Fatalf("warnings = %+v, want registry_v1", got.Warnings)
 	}
 }

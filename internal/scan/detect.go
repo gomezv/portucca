@@ -216,9 +216,7 @@ func (s *scanner) addCompose(rel string, services map[string][]json.RawMessage) 
 		}
 		port, ok := publishedPort(ports)
 		if !ok {
-			if len(ports) > 0 {
-				s.warn(fmt.Sprintf("ignoring %s: services.%s has multiple or unsupported published ports", rel, name))
-			}
+			s.warn(fmt.Sprintf("ignoring %s: services.%s has multiple or unsupported published ports", rel, name))
 			continue
 		}
 		if !domain.Port(port).Valid() {

@@ -101,6 +101,9 @@ func (a *App) initFromFlags(c project.Context, req InitRequest) (InitResult, err
 	if err := config.WriteFile(path, cfg); err != nil {
 		return InitResult{}, apperr.New("config_invalid", err.Error(), "check permissions")
 	}
+	if err := a.registerMain(c, cfg, path); err != nil {
+		return InitResult{}, err
+	}
 	return InitResult{ConfigPath: path, Project: cfg.Project, Services: cfg.Services, Warning: warning}, nil
 }
 
@@ -196,6 +199,9 @@ func (a *App) initScan(ctx context.Context, c project.Context, req InitRequest) 
 	warning := a.claimsWarning(cfg.Project, c.Root)
 	if err := config.WriteFile(path, cfg); err != nil {
 		return InitResult{}, apperr.New("config_invalid", err.Error(), "check permissions")
+	}
+	if err := a.registerMain(c, cfg, path); err != nil {
+		return InitResult{}, err
 	}
 	return InitResult{
 		ConfigPath: path, Project: cfg.Project, Services: cfg.Services, Warning: warning,

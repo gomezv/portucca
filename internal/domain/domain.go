@@ -11,7 +11,7 @@ import (
 
 const (
 	ConfigVersion   = 1
-	RegistryVersion = 1
+	RegistryVersion = 2
 	MinPort         = 1024
 	MaxPort         = 65535
 	DefaultMaxSlots = 1000
@@ -80,9 +80,17 @@ type Claim struct {
 	UpdatedAt time.Time                    `json:"updatedAt"`
 }
 
+type MainReservation struct {
+	Project   Project              `json:"project"`
+	Path      string               `json:"path"`
+	Ports     map[ServiceName]Port `json:"ports"`
+	UpdatedAt time.Time            `json:"updatedAt"`
+}
+
 type Registry struct {
-	Version   int     `json:"version"`
-	Worktrees []Claim `json:"worktrees"`
+	Version   int               `json:"version"`
+	Worktrees []Claim           `json:"worktrees"`
+	Mains     []MainReservation `json:"mains"`
 }
 
 func (c Config) ServiceNames() []ServiceName {

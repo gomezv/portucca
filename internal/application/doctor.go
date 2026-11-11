@@ -29,11 +29,20 @@ type DoctorClaim struct {
 	Issues   []Issue                                    `json:"issues"`
 }
 
+type DoctorMain struct {
+	Project domain.Project                     `json:"project"`
+	Path    string                             `json:"path"`
+	Live    bool                               `json:"live"`
+	Ports   map[domain.ServiceName]domain.Port `json:"ports"`
+	Issues  []Issue                            `json:"issues"`
+}
+
 type DoctorRegistry struct {
 	Path        string `json:"path"`
 	Version     int    `json:"version"`
 	Permissions string `json:"permissions"`
 	Claims      int    `json:"claims"`
+	Mains       int    `json:"mains"`
 }
 
 type DoctorService struct {
@@ -54,6 +63,7 @@ type DoctorResult struct {
 	Config   DoctorConfig   `json:"config"`
 	Registry DoctorRegistry `json:"registry"`
 	Claims   []DoctorClaim  `json:"claims"`
+	Mains    []DoctorMain   `json:"mains"`
 	Errors   []Issue        `json:"errors"`
 	Warnings []Issue        `json:"warnings"`
 }
@@ -64,7 +74,7 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 		return DoctorResult{}, mapLockErr(err)
 	}
 	defer unlock()
-	result := DoctorResult{OK: true, Claims: []DoctorClaim{}, Errors: []Issue{}, Warnings: []Issue{}}
+	result := DoctorResult{OK: true, Claims: []DoctorClaim{}, Mains: []DoctorMain{}, Errors: []Issue{}, Warnings: []Issue{}}
 	regPath := strings.TrimSuffix(a.Registry.LockPath(), ".lock")
 	result.Registry = DoctorRegistry{Path: regPath}
 	reg, regErr := a.Registry.Load()
@@ -75,6 +85,13 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 	} else {
 		result.Registry.Version = reg.Version
 		result.Registry.Claims = len(reg.Worktrees)
+		result.Registry.Mains = len(reg.Mains)
+		if reg.Version == 1 {
+			result.Warnings = append(result.Warnings, Issue{
+				Code: "registry_v1", Message: "the registry is still version 1",
+				Hint: "run portucca ensure in the main checkout to upgrade it",
+			})
+		}
 		if info, err := os.Stat(regPath); err == nil {
 			result.Registry.Permissions = fmt.Sprintf("%04o", info.Mode().Perm())
 		}
@@ -96,6 +113,50 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 			cfg, haveConfig = loaded, true
 			result.Project = cfg.Project
 			result.Config = doctorConfig(cfg, cfgPath)
+		}
+	}
+	reservedByPort := map[domain.Port]string{}
+	for _, main := range reg.Mains {
+		dm := DoctorMain{Project: main.Project, Path: main.Path, Ports: main.Ports, Issues: []Issue{}}
+		if _, err := os.Stat(main.Path); errors.Is(err, fs.ErrNotExist) {
+			dm.Live = false
+			dm.Issues = append(dm.Issues, Issue{
+				Code: "stale_main", Message: "the main checkout does not exist",
+				Hint: "run portucca prune",
+			})
+			result.Errors = append(result.Errors, dm.Issues...)
+			result.OK = false
+		} else {
+			dm.Live = true
+		}
+		if dm.Live {
+			for _, port := range main.Ports {
+				if owner, ok := reservedByPort[port]; ok && owner != main.Path {
+					result.Errors = append(result.Errors, Issue{
+						Code:    "main_port_conflict",
+						Message: fmt.Sprintf("port %d is reserved by %s and %s", port, owner, main.Path),
+					})
+					result.OK = false
+				}
+				reservedByPort[port] = main.Path
+			}
+		}
+		result.Mains = append(result.Mains, dm)
+	}
+	if haveConfig && c.IsMain && regErr == nil {
+		found := false
+		for _, main := range reg.Mains {
+			if main.Path == c.Root {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result.Warnings = append(result.Warnings, Issue{
+				Code:    "main_reservation_missing",
+				Message: "the main checkout has no published reservation",
+				Hint:    "run portucca ensure in the main checkout",
+			})
 		}
 	}
 	byPort := map[domain.Port]string{}
@@ -125,6 +186,7 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 				if a.Prober != nil && !a.Prober.IsFree(sc.Port) && claim.Path != c.Root {
 					result.Warnings = append(result.Warnings, Issue{Code: "port_busy", Message: fmt.Sprintf("port %d is busy in %s", sc.Port, claim.Path)})
 				}
+				mainClaimed := false
 				if cfgErr == nil {
 					if claimCfg.Project != claim.Project {
 						dc.Issues = append(dc.Issues, Issue{Code: "claim_project_mismatch", Message: "the claim project does not match portucca.json"})
@@ -135,9 +197,22 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 					}
 					for _, mainSvc := range claimCfg.Services {
 						if sc.Port == mainSvc.MainPort {
-							dc.Issues = append(dc.Issues, Issue{Code: "main_port_claimed", Message: "the claim uses a port reserved for the main checkout"})
+							dc.Issues = append(dc.Issues, Issue{
+								Code: "main_port_claimed", Message: "the claim uses a port reserved for the main checkout",
+								Hint: "reallocate",
+							})
+							mainClaimed = true
 							break
 						}
+					}
+				}
+				if !mainClaimed {
+					if owner, ok := reservedByPort[sc.Port]; ok && owner != claim.Path {
+						dc.Issues = append(dc.Issues, Issue{
+							Code:    "main_port_claimed",
+							Message: fmt.Sprintf("the claim uses port %d reserved by main %s", sc.Port, owner),
+							Hint:    "reallocate",
+						})
 					}
 				}
 			}
@@ -214,6 +289,12 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 			return result.Claims[i].Project < result.Claims[j].Project
 		}
 		return result.Claims[i].Path < result.Claims[j].Path
+	})
+	sort.Slice(result.Mains, func(i, j int) bool {
+		if result.Mains[i].Project != result.Mains[j].Project {
+			return result.Mains[i].Project < result.Mains[j].Project
+		}
+		return result.Mains[i].Path < result.Mains[j].Path
 	})
 	return result, nil
 }

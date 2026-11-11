@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gomezv/portucca/internal/domain"
 	"github.com/gomezv/portucca/internal/envfile"
@@ -91,7 +92,7 @@ func upsertClaim(reg domain.Registry, claim domain.Claim) domain.Registry {
 	return reg
 }
 
-func pruneStale(reg domain.Registry, stat func(string) (fs.FileInfo, error)) (domain.Registry, []domain.Claim) {
+func pruneStale(reg domain.Registry, stat func(string) (fs.FileInfo, error)) (domain.Registry, []domain.Claim, []domain.MainReservation) {
 	kept := make([]domain.Claim, 0, len(reg.Worktrees))
 	var removed []domain.Claim
 	for _, claim := range reg.Worktrees {
@@ -102,7 +103,17 @@ func pruneStale(reg domain.Registry, stat func(string) (fs.FileInfo, error)) (do
 		kept = append(kept, claim)
 	}
 	reg.Worktrees = kept
-	return reg, removed
+	keptMains := make([]domain.MainReservation, 0, len(reg.Mains))
+	var removedMains []domain.MainReservation
+	for _, main := range reg.Mains {
+		if _, err := stat(main.Path); errors.Is(err, fs.ErrNotExist) {
+			removedMains = append(removedMains, main)
+			continue
+		}
+		keptMains = append(keptMains, main)
+	}
+	reg.Mains = keptMains
+	return reg, removed, removedMains
 }
 
 func occupiedFrom(reg domain.Registry, exceptPath string) map[domain.Port]string {
@@ -126,12 +137,60 @@ func reservedMainPorts(cfg domain.Config) map[domain.Port]string {
 	return out
 }
 
-func occupiedWithMainPorts(cfg domain.Config, reg domain.Registry, exceptPath string) map[domain.Port]string {
+func mainReservationPorts(reg domain.Registry) map[domain.Port]string {
+	out := map[domain.Port]string{}
+	for _, main := range reg.Mains {
+		for _, port := range main.Ports {
+			out[port] = "main:" + main.Path
+		}
+	}
+	return out
+}
+
+func occupiedWithReservations(cfg domain.Config, reg domain.Registry, exceptPath string) map[domain.Port]string {
 	out := occupiedFrom(reg, exceptPath)
+	for port, marker := range mainReservationPorts(reg) {
+		out[port] = marker
+	}
 	for port, marker := range reservedMainPorts(cfg) {
 		out[port] = marker
 	}
 	return out
+}
+
+func upsertMainReservation(reg domain.Registry, cfg domain.Config, path string, now time.Time) (domain.Registry, bool) {
+	ports := make(map[domain.ServiceName]domain.Port, len(cfg.Services))
+	for name, svc := range cfg.Services {
+		ports[name] = svc.MainPort
+	}
+	for i, main := range reg.Mains {
+		if main.Path != path {
+			continue
+		}
+		if main.Project == cfg.Project && portsEqual(main.Ports, ports) {
+			return reg, false
+		}
+		reg.Mains[i] = domain.MainReservation{
+			Project: cfg.Project, Path: path, Ports: ports, UpdatedAt: now,
+		}
+		return reg, true
+	}
+	reg.Mains = append(reg.Mains, domain.MainReservation{
+		Project: cfg.Project, Path: path, Ports: ports, UpdatedAt: now,
+	})
+	return reg, true
+}
+
+func portsEqual(a, b map[domain.ServiceName]domain.Port) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for name, port := range a {
+		if b[name] != port {
+			return false
+		}
+	}
+	return true
 }
 
 func claimDiffers(claim *domain.Claim, services map[domain.ServiceName]domain.ServiceClaim) bool {

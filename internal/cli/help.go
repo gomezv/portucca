@@ -8,7 +8,7 @@ import (
 const globalFlagsHelp = `Global flags:
   --json                 Print the JSON envelope
   --config <path>        Alternate portucca.json path (must be at the repo root)
-  --registry <path>      Alternate claims registry path
+  --registry <path>      Alternate registry path (claims and main reservations)
   --worktree <path>      Worktree path to operate on (default ".")
   --lock-timeout <dur>   Registry lock timeout (default 5s)
   -h, --help             Show this command's help
@@ -27,7 +27,7 @@ Commands:
   ensure      Assign or reuse the worktree ports
   setup       Bootstrap the worktree and ensure ports
   reallocate  Move this worktree to new ports
-  prune       Remove claims for deleted worktrees
+  prune       Remove claims and main reservations for deleted paths
   doctor      Read-only diagnostics
   env         Print resolved ports and env values
   list        List claims
@@ -38,7 +38,7 @@ Commands:
 Global flags:
   --json                 Print the JSON envelope
   --config <path>        Alternate portucca.json path (must be at the repo root)
-  --registry <path>      Alternate claims registry path
+  --registry <path>      Alternate registry path (claims and main reservations)
   --worktree <path>      Worktree path to operate on (default ".")
   --lock-timeout <dur>   Registry lock timeout (default 5s)
   -h, --help             Show this help
@@ -71,7 +71,8 @@ What it does:
   services, ports and preset. With --scan, detects signals from package.json,
   .env* and Compose JSON/YAML; --compose discovers services from Compose.
   Explicit flags override detected values.
-  It does not touch the claims registry.
+  In a worktree it does not touch the registry; in the main checkout it
+  publishes the mainPort reservation.
 
 Examples:
   portucca init --project app --service web:5173:5174
@@ -96,8 +97,12 @@ Notes:
     a local, gitignored config.
   - --compose requires --scan; --exclude-service requires --compose and
     cannot be combined with --service.
+  - --exclude-service filters detection only; it does not reserve the excluded
+    service's published ports. If one of those ports falls inside your band,
+    omit --compose and declare explicit --service ports; Compose still
+    enriches matching candidates.
   - Discovered Compose services only get ports; env and bootstrap still come
-    from .env*/package.json or configured by hand in portucca.json.
+    from .env*/package.json or are configured by hand in portucca.json.
 `,
 	"ensure": `portucca ensure — assign or reuse the worktree ports
 
@@ -140,8 +145,8 @@ Examples:
 Notes:
   - Run this once in a new worktree.
   - It does not install dependencies, run builds or start processes.
-  - In the main checkout it returns the reserved mainPort values and writes
-    nothing.
+  - In the main checkout it publishes the mainPort reservation and writes no
+    env files.
 `,
 	"reallocate": `portucca reallocate — move this worktree to new ports
 
@@ -160,15 +165,15 @@ Notes:
   - This is the only command that changes an existing worktree URL.
   - It fails in the main checkout with main_reserved.
 `,
-	"prune": `portucca prune — remove claims for deleted worktrees
+	"prune": `portucca prune — remove claims and main reservations for deleted paths
 
 Usage:
   portucca prune [flags]
 
 What it does:
-  - loads the registry and drops claims whose worktree directory no longer
-    exists
-  - reports the number of removed claims
+  - loads the registry and drops claims and main reservations whose directory
+    no longer exists
+  - reports removed claims and main reservations
 
 Examples:
   portucca prune
@@ -180,7 +185,8 @@ Usage:
   portucca doctor [flags]
 
 What it checks:
-  - config validity, registry state, claims, env files, symlinks and conflicts
+  - config validity, registry state, claims, main reservations, env files,
+    symlinks and conflicts
   - reports ok, errors, warnings and the current worktree state
 
 Examples:

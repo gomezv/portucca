@@ -535,7 +535,7 @@ func TestInitScanHelp(t *testing.T) {
 		t.Fatalf("exit = %d, want 0", code)
 	}
 	text := out.String()
-	for _, want := range []string{"--scan", "--compose", "--exclude-service", "Compose JSON/YAML", "configured by hand"} {
+	for _, want := range []string{"--scan", "--compose", "--exclude-service", "Compose JSON/YAML", "configured by hand", "does not reserve"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help = %q, want %q", text, want)
 		}
@@ -563,6 +563,7 @@ func TestInitComposeFlagValidation(t *testing.T) {
 		{"exclude requires compose", []string{"init", "--json", "--worktree", dir, "--scan", "--exclude-service", "db"}, "--exclude-service requires --compose"},
 		{"exclude with service", []string{"init", "--json", "--worktree", dir, "--scan", "--compose", "--exclude-service", "db", "--service", "web:8080:8081"}, "--exclude-service cannot be combined with --service"},
 		{"invalid exclude", []string{"init", "--json", "--worktree", dir, "--scan", "--compose", "--exclude-service", "!!!"}, "invalid --exclude-service"},
+		{"empty exclude", []string{"init", "--json", "--worktree", dir, "--scan", "--compose", "--exclude-service", ""}, "invalid --exclude-service"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -628,5 +629,23 @@ func TestInitScanComposeExplicitWins(t *testing.T) {
 	}
 	if env.Data.Services["web"].MainPort != 9000 {
 		t.Fatalf("services = %+v, want explicit web 9000", env.Data.Services)
+	}
+}
+
+func TestPruneHumanOutputReportsMains(t *testing.T) {
+	dir := t.TempDir()
+	reg := filepath.Join(dir, "ports.json")
+	dead := filepath.Join(dir, "gone")
+	raw := `{"version":2,"worktrees":[],"mains":[{"project":"app","path":"` + dead + `","ports":{"web":18080},"updatedAt":"2026-11-10T00:00:00Z"}]}`
+	if err := os.WriteFile(reg, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"prune", "--registry", reg}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, out=%s err=%s", code, out.String(), errb.String())
+	}
+	if !strings.Contains(out.String(), "removed: 0 mains: 1") {
+		t.Fatalf("output = %q, want removed and mains counts", out.String())
 	}
 }

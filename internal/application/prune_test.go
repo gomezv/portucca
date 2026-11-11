@@ -36,6 +36,33 @@ func TestPruneRemovesMissingPaths(t *testing.T) {
 	}
 }
 
+func TestPruneRemovesDeadMainReservations(t *testing.T) {
+	dir := t.TempDir()
+	live := filepath.Join(dir, "live-main")
+	missing := filepath.Join(dir, "missing-main")
+	if err := os.Mkdir(live, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version: 2,
+		Mains: []domain.MainReservation{
+			{Project: "app", Path: live, Ports: map[domain.ServiceName]domain.Port{"web": 3000}},
+			{Project: "app", Path: missing, Ports: map[domain.ServiceName]domain.Port{"web": 3002}},
+		},
+	}}
+	app := &App{Registry: reg, Locker: fakeLocker{}}
+	got, err := app.Prune(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.RemovedMains) != 1 || got.RemovedMains[0].Path != missing {
+		t.Fatalf("removedMains = %+v", got.RemovedMains)
+	}
+	if len(reg.reg.Mains) != 1 || reg.reg.Mains[0].Path != live || reg.saves != 1 {
+		t.Fatalf("registry = %+v saves=%d", reg.reg, reg.saves)
+	}
+}
+
 func TestPruneWithoutStaleClaimsDoesNotSave(t *testing.T) {
 	dir := t.TempDir()
 	reg := &fakeRegistry{reg: domain.Registry{
@@ -51,6 +78,9 @@ func TestPruneWithoutStaleClaimsDoesNotSave(t *testing.T) {
 	}
 	if got.Removed == nil || len(got.Removed) != 0 {
 		t.Fatalf("removed = %#v, want empty non-nil slice", got.Removed)
+	}
+	if got.RemovedMains == nil || len(got.RemovedMains) != 0 {
+		t.Fatalf("removedMains = %#v, want empty non-nil slice", got.RemovedMains)
 	}
 	if reg.saves != 0 || len(reg.reg.Worktrees) != 1 {
 		t.Fatalf("registry = %+v saves=%d", reg.reg, reg.saves)

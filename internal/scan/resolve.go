@@ -13,7 +13,7 @@ import (
 )
 
 func (s *scanner) result() Detected {
-	if len(s.byDir) > 1 {
+	if len(s.byDir) > 1 || (s.opts.DiscoverCompose && len(s.compose) > 0) {
 		if c, ok := s.byDir["."]; ok {
 			pkg := s.packages["."]
 			switch {

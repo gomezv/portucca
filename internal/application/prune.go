@@ -8,7 +8,8 @@ import (
 )
 
 type PruneResult struct {
-	Removed []domain.Claim `json:"removed"`
+	Removed      []domain.Claim           `json:"removed"`
+	RemovedMains []domain.MainReservation `json:"removedMains"`
 }
 
 func (a *App) Prune(ctx context.Context) (PruneResult, error) {
@@ -21,14 +22,17 @@ func (a *App) Prune(ctx context.Context) (PruneResult, error) {
 	if err != nil {
 		return PruneResult{}, mapRegistryErr(err)
 	}
-	reg, removed := pruneStale(reg, os.Stat)
+	reg, removed, removedMains := pruneStale(reg, os.Stat)
 	if removed == nil {
 		removed = []domain.Claim{}
 	}
-	if len(removed) > 0 {
+	if removedMains == nil {
+		removedMains = []domain.MainReservation{}
+	}
+	if len(removed) > 0 || len(removedMains) > 0 {
 		if err := a.Registry.Save(reg); err != nil {
 			return PruneResult{}, mapRegistryErr(err)
 		}
 	}
-	return PruneResult{Removed: removed}, nil
+	return PruneResult{Removed: removed, RemovedMains: removedMains}, nil
 }

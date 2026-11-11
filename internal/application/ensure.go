@@ -34,7 +34,7 @@ func (a *App) Ensure(ctx context.Context, worktree string) (EnsureResult, error)
 		return EnsureResult{}, mapConfigErr(err)
 	}
 	if c.IsMain {
-		return mainEnsureResult(c, cfg, cfgPath), nil
+		return a.ensureMain(c, cfg, cfgPath)
 	}
 	unlock, err := a.Locker.Lock(a.Registry.LockPath(), a.timeout(), false)
 	if err != nil {
@@ -44,12 +44,52 @@ func (a *App) Ensure(ctx context.Context, worktree string) (EnsureResult, error)
 	return a.ensureLocked(c, cfg, cfgPath)
 }
 
+func (a *App) ensureMain(c project.Context, cfg domain.Config, cfgPath string) (EnsureResult, error) {
+	unlock, err := a.Locker.Lock(a.Registry.LockPath(), a.timeout(), false)
+	if err != nil {
+		return EnsureResult{}, mapLockErr(err)
+	}
+	defer unlock()
+	reg, err := a.Registry.Load()
+	if err != nil {
+		return EnsureResult{}, mapRegistryErr(err)
+	}
+	reg, removedClaims, removedMains := pruneStale(reg, os.Stat)
+	reg, reserved := upsertMainReservation(reg, cfg, c.Root, a.now())
+	changed := reserved || len(removedClaims) > 0 || len(removedMains) > 0
+	if changed {
+		if err := a.Registry.Save(reg); err != nil {
+			return EnsureResult{}, mapRegistryErr(err)
+		}
+	}
+	res := mainEnsureResult(c, cfg, cfgPath)
+	res.Changed = changed
+	return res, nil
+}
+
+func (a *App) registerMain(c project.Context, cfg domain.Config, cfgPath string) error {
+	if !c.IsMain {
+		return nil
+	}
+	if _, err := a.ensureMain(c, cfg, cfgPath); err != nil {
+		if ae, ok := apperr.As(err); ok {
+			hint := ae.Hint
+			if hint == "" {
+				hint = "config was written; run portucca ensure in the main checkout"
+			}
+			return apperr.New(ae.Code, ae.Message, hint)
+		}
+		return err
+	}
+	return nil
+}
+
 func (a *App) ensureLocked(c project.Context, cfg domain.Config, cfgPath string) (EnsureResult, error) {
 	reg, err := a.Registry.Load()
 	if err != nil {
 		return EnsureResult{}, mapRegistryErr(err)
 	}
-	reg, removed := pruneStale(reg, os.Stat)
+	reg, removedClaims, removedMains := pruneStale(reg, os.Stat)
 	own := findClaim(reg, c.Root)
 	if own != nil && own.Project != cfg.Project {
 		return EnsureResult{}, apperr.New(
@@ -67,7 +107,7 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config, cfgPath string)
 	res, err := allocation.Plan(allocation.Request{
 		Config:   cfg,
 		Existing: existing,
-		Occupied: occupiedWithMainPorts(cfg, reg, c.Root),
+		Occupied: occupiedWithReservations(cfg, reg, c.Root),
 		Prober:   a.Prober,
 		ReadPort: func(ref domain.EnvRef) (domain.Port, bool, error) {
 			return a.EnvStore.ReadPort(c.Root, ref)
@@ -81,7 +121,7 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config, cfgPath string)
 	if err != nil {
 		return EnsureResult{}, apperr.New("env_write", err.Error(), "check the env file permissions")
 	}
-	changed := res.Changed || envChanged || len(removed) > 0 || own == nil || claimDiffers(own, res.Services)
+	changed := res.Changed || envChanged || len(removedClaims) > 0 || len(removedMains) > 0 || own == nil || claimDiffers(own, res.Services)
 	if changed {
 		reg = upsertClaim(reg, domain.Claim{
 			Project: cfg.Project, Path: c.Root, Services: res.Services, UpdatedAt: a.now(),

@@ -119,12 +119,13 @@ func errorCode(t *testing.T, err error) string {
 	return e.Code
 }
 
-func TestSetupMainReturnsEmptyBootstrapActions(t *testing.T) {
+func TestSetupMainRegistersReservation(t *testing.T) {
+	main := t.TempDir()
 	cfg := bootstrapConfig()
-	reg := &fakeRegistry{reg: domain.Registry{Version: 1}}
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
 	env := &bootstrapEnv{fakeEnv: &fakeEnv{}}
-	app := testApp(fakeLocator{ctx: project.Context{Root: "/repo", MainRoot: "/repo", IsMain: true}}, cfg, reg, env)
-	got, err := app.Setup(context.Background(), "/repo")
+	app := testApp(fakeLocator{ctx: project.Context{Root: main, MainRoot: main, IsMain: true}}, cfg, reg, env)
+	got, err := app.Setup(context.Background(), main)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,8 +138,11 @@ func TestSetupMainReturnsEmptyBootstrapActions(t *testing.T) {
 	if len(got.Bootstrap.Copied) != 0 || len(got.Bootstrap.Symlinked) != 0 || len(got.Bootstrap.Skipped) != 0 {
 		t.Fatalf("main bootstrapped: %+v", got.Bootstrap)
 	}
-	if len(env.copied) != 0 || len(env.symlinked) != 0 || reg.saves != 0 {
-		t.Fatalf("main wrote: copied=%v symlinked=%v saves=%d", env.copied, env.symlinked, reg.saves)
+	if len(env.copied) != 0 || len(env.symlinked) != 0 {
+		t.Fatalf("main wrote env: copied=%v symlinked=%v", env.copied, env.symlinked)
+	}
+	if len(reg.reg.Mains) != 1 || reg.reg.Mains[0].Ports["web"] != 3000 {
+		t.Fatalf("mains = %+v", reg.reg.Mains)
 	}
 }
 

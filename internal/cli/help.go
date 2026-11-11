@@ -27,6 +27,7 @@ Commands:
   ensure      Assign or reuse the worktree ports
   setup       Bootstrap the worktree and ensure ports
   reallocate  Move this worktree to new ports
+  release     Release this worktree's claim or one service
   prune       Remove claims and main reservations for deleted paths
   doctor      Read-only diagnostics
   env         Print resolved ports and env values
@@ -164,6 +165,27 @@ Examples:
 Notes:
   - This is the only command that changes an existing worktree URL.
   - It fails in the main checkout with main_reserved.
+`,
+	"release": `portucca release — release this worktree's claim
+
+Usage:
+  portucca release [--service <name>] [flags]
+
+What it does:
+  - removes the claim for the current worktree, or only the given service
+  - does not delete the worktree and does not modify env files
+  - the next ensure assigns ports again
+
+Examples:
+  portucca release
+  portucca release --service api
+  portucca release --json
+
+Notes:
+  - It fails in the main checkout with main_reserved.
+  - It fails with no_claim when the worktree has no claim.
+  - It fails with service_not_claimed when --service is not in the claim.
+  - Another worktree can take the released port.
 `,
 	"prune": `portucca prune — remove claims and main reservations for deleted paths
 

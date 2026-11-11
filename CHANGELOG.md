@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `portucca release [--service <name>]` releases the worktree claim, or one service, without
+  deleting the worktree or modifying env files.
+
 ### Changed
 
 - The registry is now version 2 and records the main checkout's reserved ports (`mains`).

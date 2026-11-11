@@ -36,6 +36,7 @@ var knownCommands = map[string]bool{
 	"ensure":     true,
 	"setup":      true,
 	"reallocate": true,
+	"release":    true,
 	"prune":      true,
 	"doctor":     true,
 	"env":        true,
@@ -134,12 +135,15 @@ func execute(cmd string, args []string) (any, bool, error) {
 	var excludeServices stringList
 	var services stringList
 	var runService string
+	var releaseService string
 	switch cmd {
 	case "list":
 		fs.BoolVar(&all, "all", false, "")
 		fs.StringVar(&projectFlag, "project", "", "")
 	case "run":
 		fs.StringVar(&runService, "service", "", "")
+	case "release":
+		fs.StringVar(&releaseService, "service", "", "")
 	case "init":
 		fs.StringVar(&initProject, "project", "", "")
 		fs.StringVar(&initPreset, "preset", "", "")
@@ -245,6 +249,9 @@ func execute(cmd string, args []string) (any, bool, error) {
 		return data, g.json, err
 	case "reallocate":
 		data, err := app.Reallocate(ctx, g.worktree)
+		return data, g.json, err
+	case "release":
+		data, err := app.Release(ctx, g.worktree, domain.ServiceName(releaseService))
 		return data, g.json, err
 	case "prune":
 		data, err := app.Prune(ctx)

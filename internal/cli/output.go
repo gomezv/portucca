@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/gomezv/portucca/internal/apperr"
 	"github.com/gomezv/portucca/internal/application"
@@ -84,6 +85,17 @@ func writeHuman(w io.Writer, cmd string, data any, err error) {
 		}
 	case application.PruneResult:
 		fmt.Fprintf(w, "removed: %d mains: %d\n", len(v.Removed), len(v.RemovedMains))
+	case application.ReleaseResult:
+		names := make([]string, 0, len(v.Released))
+		for name := range v.Released {
+			names = append(names, string(name))
+		}
+		sort.Strings(names)
+		parts := make([]string, 0, len(names))
+		for _, name := range names {
+			parts = append(parts, fmt.Sprintf("%s=%d", name, v.Released[domain.ServiceName(name)]))
+		}
+		fmt.Fprintf(w, "released: %s\n", strings.Join(parts, " "))
 	case application.DoctorResult:
 		fmt.Fprintf(w, "ok: %v errors=%d warnings=%d\n", v.OK, len(v.Errors), len(v.Warnings))
 		for _, e := range v.Errors {

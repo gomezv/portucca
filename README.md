@@ -75,8 +75,8 @@ framework nor a specific `.env` layout.
    preparation and then execs an explicit command with the resolved environment.
 3. `ensure` assigns one port per service, stores the claim in a per-user registry keyed by
    the worktree path, and writes the values to the configured env files. The claim survives
-   restarts and is released on the next `ensure` or `prune` after the worktree directory is
-   deleted.
+   restarts and is released when the worktree directory is deleted or with
+   `portucca release` (which keeps the directory and leaves env files untouched).
 4. The main checkout publishes its reserved `mainPort` values to the registry; it never
    receives claims or env writes.
 5. `doctor`, `env`, and `list` are read-only. The registry lives in
@@ -283,6 +283,7 @@ examples, and notes for each command.
 | `setup` | Bootstraps the worktree and runs `ensure`. |
 | `run [--service <name>] -- <command> [args...]` | Bootstraps, assigns ports, and execs the command with the resolved env. Exits with the command's status. |
 | `ensure` | Assigns or reuses the worktree ports, repairs env files, and writes the registry. |
+| `release [--service <name>]` | Releases the worktree claim, or one service, without deleting the worktree or touching env files. |
 | `reallocate` | Moves the worktree to new ports. This is the only command that changes a URL. |
 | `prune` | Removes claims for worktree directories that no longer exist. |
 | `doctor` | Read-only diagnostics. Exits `1` when `data.ok` is false. |
@@ -297,6 +298,7 @@ Examples:
 
 ```bash
 portucca ensure --json
+portucca release
 portucca reallocate --json
 portucca prune
 portucca doctor --json

@@ -649,3 +649,62 @@ func TestPruneHumanOutputReportsMains(t *testing.T) {
 		t.Fatalf("output = %q, want removed and mains counts", out.String())
 	}
 }
+
+func newGitWorktreeWithBranch(t *testing.T) (string, string) {
+	t.Helper()
+	main := newGitWorktree(t)
+	if err := os.WriteFile(filepath.Join(main, "file.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", main, "add", ".").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v: %s", err, out)
+	}
+	cmd := exec.Command("git", "-C", main, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "init")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v: %s", err, out)
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	cmd = exec.Command("git", "-C", main, "worktree", "add", "-q", wt, "-b", "feature")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v: %s", err, out)
+	}
+	return main, wt
+}
+
+func TestReleaseHumanOutputAndServiceFlag(t *testing.T) {
+	_, wt := newGitWorktreeWithBranch(t)
+	real, err := filepath.EvalSymlinks(wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := filepath.Join(t.TempDir(), "ports.json")
+	raw := `{"version":2,"worktrees":[{"project":"app","path":"` + real + `","services":{"web":{"port":18080},"api":{"port":18081}},"updatedAt":"2026-11-11T00:00:00Z"}],"mains":[]}`
+	if err := os.WriteFile(reg, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"release", "--worktree", wt, "--registry", reg, "--service", "web"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d, out=%s err=%s", code, out.String(), errb.String())
+	}
+	if !strings.Contains(out.String(), "released: web=18080") {
+		t.Fatalf("output = %q", out.String())
+	}
+	data, err := os.ReadFile(reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"web"`) || !strings.Contains(string(data), `"api"`) {
+		t.Fatalf("registry = %s, want only api", data)
+	}
+}
+
+func TestReleaseHelp(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := Run([]string{"help", "release"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if !strings.Contains(out.String(), "--service") || !strings.Contains(out.String(), "main_reserved") {
+		t.Fatalf("help = %q", out.String())
+	}
+}

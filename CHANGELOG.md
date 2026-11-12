@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-12
+
 ### Added
 
 - `portucca tui` opens a read-only dashboard of every project in the registry: worktrees,
   main reservations, claims, ports, bands, and lightweight issues. It refreshes every 5
   seconds or with `r`, never writes state, and requires an interactive terminal.
+- Release artifacts for Linux and macOS on `amd64` and `arm64`.
 
 ## [0.4.0] - 2026-11-11
 
@@ -91,7 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `install.sh` with OS/architecture detection and SHA-256 checksum verification.
 - Release artifacts for Linux and macOS on `amd64` and `arm64`.
 
-[Unreleased]: https://github.com/gomezv/portucca/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/gomezv/portucca/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/gomezv/portucca/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/gomezv/portucca/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/gomezv/portucca/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/gomezv/portucca/compare/v0.1.1...v0.2.0

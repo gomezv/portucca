@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `portucca tui` opens a read-only dashboard of every project in the registry: worktrees,
+  main reservations, claims, ports, bands, and lightweight issues. It refreshes every 5
+  seconds or with `r`, never writes state, and requires an interactive terminal.
+
 ## [0.4.0] - 2026-11-11
 
 ### Added

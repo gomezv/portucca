@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"os"
 	"runtime"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/gomezv/portucca/internal/project"
 	"github.com/gomezv/portucca/internal/registry"
 	"github.com/gomezv/portucca/internal/scan"
+	"github.com/gomezv/portucca/internal/tui"
 )
 
 type globalFlags struct {
@@ -38,6 +40,7 @@ var knownCommands = map[string]bool{
 	"reallocate": true,
 	"release":    true,
 	"prune":      true,
+	"tui":        true,
 	"doctor":     true,
 	"env":        true,
 	"list":       true,
@@ -102,6 +105,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			writeHuman(stdout, cmd, data, nil)
 		}
 		return 1
+	}
+	if cmd == "tui" && data == nil && err == nil {
+		return 0
 	}
 	if jsonMode {
 		writeJSON(stdout, cmd, data, nil)
@@ -253,6 +259,21 @@ func execute(cmd string, args []string) (any, bool, error) {
 	case "release":
 		data, err := app.Release(ctx, g.worktree, domain.ServiceName(releaseService))
 		return data, g.json, err
+	case "tui":
+		if g.json {
+			return nil, g.json, apperr.New("usage", "tui does not support --json", "run portucca tui without --json")
+		}
+		if !tui.IsTerminal(os.Stdin) || !tui.IsTerminal(os.Stdout) {
+			return nil, g.json, apperr.New("tty_required", "tui requires an interactive terminal", "run it in a terminal")
+		}
+		overview, err := app.Overview(ctx)
+		if err != nil {
+			return nil, g.json, err
+		}
+		if err := tui.Run(os.Stdin, os.Stdout, overview, regPath, g.worktree, app.Overview); err != nil {
+			return nil, g.json, apperr.New("internal", err.Error(), "retry in an interactive terminal")
+		}
+		return nil, g.json, nil
 	case "prune":
 		data, err := app.Prune(ctx)
 		return data, g.json, err

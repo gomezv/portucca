@@ -62,7 +62,7 @@ framework nor a specific `.env` layout.
   existing worktree
 - Dependency installation or builds: `setup` does not run project commands, and `run` does
   not install dependencies; `run` only execs the command you pass after `--`
-- TUI and plugins (deferred to v2)
+- Plugins (deferred to v2)
 
 ## How it works
 
@@ -289,6 +289,7 @@ examples, and notes for each command.
 | `doctor` | Read-only diagnostics. Exits `1` when `data.ok` is false. |
 | `env` | Prints the resolved ports and env values for the current worktree. |
 | `list` | Lists claims. Defaults to the current project; use `--all` or `--project <name>`. |
+| `tui` | Opens a read-only dashboard of all projects, worktrees, claims, main reservations, ports, bands, and issues. |
 | `version` | Prints version, commit, OS, architecture, and schema version. |
 
 Global flags: `--json`, `--config <path>`, `--registry <path>`, `--worktree <path>`,
@@ -303,12 +304,25 @@ portucca reallocate --json
 portucca prune
 portucca doctor --json
 portucca list --all
+portucca tui
 portucca run -- npm run dev
 portucca version --json
 ```
 
 `--all` and `--project` are mutually exclusive (exit `2`). The project name comes from
 `portucca.json`; there is no global `--project` flag outside `list`.
+
+## TUI
+
+`portucca tui` opens a read-only dashboard of every project in the registry: worktrees, main
+reservations, claims, ports, configured bands, and lightweight issues. It never writes the
+registry, env files, config, or worktrees; it only takes a shared lock to read.
+
+Keys: `up`/`down` or `j`/`k` move, `tab` switches between the table and the detail pane, `r`
+refreshes, and `q` or `ctrl+c` quits. It also refreshes every 5 seconds.
+
+It requires an interactive terminal and does not support `--json`. `--worktree` only selects
+the initial row; `--config` does not apply to the global snapshot.
 
 ## Configuration
 

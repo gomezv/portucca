@@ -708,3 +708,33 @@ func TestReleaseHelp(t *testing.T) {
 		t.Fatalf("help = %q", out.String())
 	}
 }
+
+func TestTUIJSONRejected(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"tui", "--json"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("exit = %d, out=%s err=%s", code, out.String(), errb.String())
+	}
+	combined := out.String() + errb.String()
+	if !strings.Contains(combined, "usage") && !strings.Contains(combined, "--json") {
+		t.Fatalf("output = %q, want usage/--json", combined)
+	}
+}
+
+func TestTUIHelp(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := Run([]string{"help", "tui"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d, err=%s", code, errb.String())
+	}
+	text := out.String()
+	for _, want := range []string{"refresh", "tab", "j/k", "ctrl+c"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("help missing %q:\n%s", want, text)
+		}
+	}
+	for _, bad := range []string{"ensure", "reallocate", "prune", "mouse"} {
+		if strings.Contains(text, bad) {
+			t.Fatalf("help mentions %q:\n%s", bad, text)
+		}
+	}
+}

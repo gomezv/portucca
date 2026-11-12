@@ -28,6 +28,7 @@ Commands:
   setup       Bootstrap the worktree and ensure ports
   reallocate  Move this worktree to new ports
   release     Release this worktree's claim or one service
+  tui         Read-only dashboard of projects and worktrees
   prune       Remove claims and main reservations for deleted paths
   doctor      Read-only diagnostics
   env         Print resolved ports and env values
@@ -186,6 +187,28 @@ Notes:
   - It fails with no_claim when the worktree has no claim.
   - It fails with service_not_claimed when --service is not in the claim.
   - Another worktree can take the released port.
+`,
+	"tui": `portucca tui — read-only dashboard
+
+Usage:
+  portucca tui [flags]
+
+What it does:
+  - shows projects, worktrees, claims, main reservations, ports, bands and issues
+  - refreshes every 5 seconds or with r
+  - never writes the registry or env files
+
+Keys:
+  up/down or j/k  move
+  tab             switch table/detail
+  r               refresh
+  q, ctrl+c       quit
+
+Notes:
+  - It requires an interactive terminal.
+  - --json is not supported.
+  - --worktree only selects the initial row.
+  - --config does not apply to the global snapshot.
 `,
 	"prune": `portucca prune — remove claims and main reservations for deleted paths
 

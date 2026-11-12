@@ -218,14 +218,22 @@ func configIssues(err error) []Issue {
 			Hint: "run portucca init in the main checkout",
 		}}
 	}
-	message := err.Error()
-	for _, prefix := range []string{"config_invalid: ", "config_version: ", "config_missing: "} {
-		if strings.HasPrefix(message, prefix) {
-			message = strings.TrimPrefix(message, prefix)
-			break
+	return []Issue{{Code: "config_invalid", Message: normalizeConfigMessage(err.Error())}}
+}
+
+func normalizeConfigMessage(message string) string {
+	for {
+		switch {
+		case strings.HasPrefix(message, "config_invalid: "):
+			message = strings.TrimPrefix(message, "config_invalid: ")
+		case strings.HasPrefix(message, "config_missing: "):
+			message = strings.TrimPrefix(message, "config_missing: ")
+		case strings.HasPrefix(message, "config_version: "):
+			return "unsupported config version " + strings.TrimPrefix(message, "config_version: ")
+		default:
+			return message
 		}
 	}
-	return []Issue{{Code: "config_invalid", Message: message}}
 }
 
 func sortedServiceNames[T any](services map[domain.ServiceName]T) []domain.ServiceName {

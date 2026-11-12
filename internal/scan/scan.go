@@ -32,6 +32,7 @@ func Scan(ctx context.Context, opts Options) (Detected, error) {
 		packages:     map[string]packageInfo{},
 		composeNames: map[domain.ServiceName]bool{},
 		exclude:      exclude,
+		checkedByDir: map[string][]string{},
 	}
 	if err := s.walk(ctx, s.detectFile); err != nil {
 		return Detected{}, err

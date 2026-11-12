@@ -390,3 +390,58 @@ func TestInitScanMainRegistersReservation(t *testing.T) {
 		t.Fatalf("mains = %+v", reg.reg.Mains)
 	}
 }
+
+func TestInitScanGapExplainsCheckedSources(t *testing.T) {
+	det := scan.Detected{
+		Project: &scan.Value{Value: "app", Source: "directory"},
+		Services: []scan.Service{{
+			Name: "voy-rojo", Dir: ".",
+			Checked: []string{".env", ".env.example", "package.json"},
+		}},
+	}
+	app, dir := scanApp(t, det)
+	_, err := app.Init(context.Background(), InitRequest{Scan: true, Worktree: dir})
+	ae, ok := apperr.As(err)
+	if !ok || ae.Code != "scan_incomplete" {
+		t.Fatalf("err = %v, want scan_incomplete", err)
+	}
+	gaps, ok := ae.Details["gaps"].([]scan.Gap)
+	if !ok || len(gaps) != 1 {
+		t.Fatalf("gaps = %+v, want one gap", ae.Details["gaps"])
+	}
+	msg := gaps[0].Message
+	for _, want := range []string{
+		"no port declaration found for service voy-rojo at the repository root",
+		"checked .env, .env.example, and package.json",
+		"framework defaults are not assumed",
+		"PORT=<port>",
+		"--service voy-rojo:3000:3001",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("message %q missing %q", msg, want)
+		}
+	}
+	if len(gaps[0].Flags) != 1 || gaps[0].Flags[0] != "--service voy-rojo:<main>:<start>" {
+		t.Fatalf("flags = %+v", gaps[0].Flags)
+	}
+}
+
+func TestInitScanGapNamesSubdirectory(t *testing.T) {
+	det := scan.Detected{
+		Project: &scan.Value{Value: "app", Source: "directory"},
+		Services: []scan.Service{{
+			Name: "api", Dir: "apps/api",
+			Checked: []string{"apps/api/.env", "apps/api/package.json"},
+		}},
+	}
+	app, dir := scanApp(t, det)
+	_, err := app.Init(context.Background(), InitRequest{Scan: true, Worktree: dir})
+	ae, ok := apperr.As(err)
+	if !ok || ae.Code != "scan_incomplete" {
+		t.Fatalf("err = %v, want scan_incomplete", err)
+	}
+	gaps := ae.Details["gaps"].([]scan.Gap)
+	if !strings.Contains(gaps[0].Message, "at directory apps/api") {
+		t.Fatalf("message = %q, want the subdirectory", gaps[0].Message)
+	}
+}

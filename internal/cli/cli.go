@@ -275,7 +275,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 		}
 		return nil, g.json, nil
 	case "prune":
-		data, err := app.Prune(ctx)
+		data, err := app.Prune(ctx, g.worktree)
 		return data, g.json, err
 	case "doctor":
 		data, err := app.Doctor(ctx, g.worktree)

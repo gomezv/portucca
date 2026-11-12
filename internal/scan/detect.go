@@ -52,6 +52,7 @@ func (s *scanner) readPackage(file, rel string) {
 		return
 	}
 	dir := path.Dir(rel)
+	s.recordChecked(dir, rel)
 	hasRun := false
 	var signals []portSignal
 	for _, script := range []string{"dev", "start", "serve"} {
@@ -95,6 +96,7 @@ func (s *scanner) readEnv(file, rel string) {
 		s.warn(fmt.Sprintf("ignoring %s: %v", rel, err))
 		return
 	}
+	s.recordChecked(path.Dir(rel), rel)
 	name := path.Base(rel)
 	rank := envRank(name)
 	example := rank == rankEnvExample
@@ -135,6 +137,7 @@ func (s *scanner) readEnv(file, rel string) {
 }
 
 func (s *scanner) readCompose(file, rel string) {
+	s.recordCompose(rel)
 	switch path.Ext(rel) {
 	case ".json":
 		s.readComposeJSON(file, rel)

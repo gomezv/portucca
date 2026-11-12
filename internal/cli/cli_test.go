@@ -738,3 +738,32 @@ func TestTUIHelp(t *testing.T) {
 		}
 	}
 }
+
+func TestPruneWorktreeRemovesCurrentMainWithoutConfig(t *testing.T) {
+	main := newGitWorktree(t)
+	reg := filepath.Join(t.TempDir(), "ports.json")
+	raw := `{"version":2,"worktrees":[],"mains":[{"project":"app","path":"` + main + `","ports":{"web":18130},"updatedAt":"2026-11-10T00:00:00Z"}]}`
+	if err := os.WriteFile(reg, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := Run([]string{"prune", "--worktree", main, "--registry", reg}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d, out=%s err=%s", code, out.String(), errb.String())
+	}
+	data, err := os.ReadFile(reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored struct {
+		Mains []json.RawMessage `json:"mains"`
+	}
+	if err := json.Unmarshal(data, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Mains) != 0 {
+		t.Fatalf("mains = %s, want none", data)
+	}
+	if !strings.Contains(out.String(), "removed: 0 mains: 1") {
+		t.Fatalf("output = %q, want the main removal count", out.String())
+	}
+}

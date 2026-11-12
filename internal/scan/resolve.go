@@ -102,6 +102,7 @@ func (s *scanner) result() Detected {
 		}
 		services = append(services, Service{
 			Name: c.name, Dir: c.dir, NameSource: c.nameSource, MainPort: mainPort,
+			Checked: s.checkedFor(c.dir),
 		})
 		env = append(env, c.portTargets(mainPort)...)
 		for _, file := range c.portSignalFiles() {

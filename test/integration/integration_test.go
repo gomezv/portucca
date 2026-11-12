@@ -160,7 +160,7 @@ func TestSetupEnsureReallocatePrune(t *testing.T) {
 	if err := os.RemoveAll(wt); err != nil {
 		t.Fatal(err)
 	}
-	pruned, err := app.Prune(ctx)
+	pruned, err := app.Prune(ctx, "")
 	if err != nil {
 		t.Fatal(err)
 	}

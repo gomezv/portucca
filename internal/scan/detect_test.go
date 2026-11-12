@@ -385,3 +385,25 @@ func TestScanDropsRootOrchestrator(t *testing.T) {
 		t.Fatalf("copyFromMain = %+v, want only apps/api/.env", got.CopyFromMain)
 	}
 }
+
+func TestScanRecordsCheckedSources(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "package.json", `{"name":"app","scripts":{"dev":"next dev"}}`)
+	writeFile(t, root, ".env", "FOO=bar\n")
+	writeFile(t, root, ".env.example", "FOO=bar\n")
+	writeFile(t, root, "compose.yaml", "services:\n  db:\n    image: postgres\n")
+
+	got, err := Scan(context.Background(), Options{Root: root, MainRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Services) != 1 {
+		t.Fatalf("services = %+v, want one candidate", got.Services)
+	}
+	if got.Services[0].MainPort != nil {
+		t.Fatalf("service = %+v, want no mainPort", got.Services[0])
+	}
+	if checked := strings.Join(got.Services[0].Checked, ","); checked != ".env,.env.example,compose.yaml,package.json" {
+		t.Fatalf("checked = %q, want the parsed env and package files", checked)
+	}
+}

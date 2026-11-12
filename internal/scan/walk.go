@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/gomezv/portucca/internal/domain"
@@ -25,6 +26,7 @@ type Service struct {
 	Dir        string
 	NameSource string
 	MainPort   *Value
+	Checked    []string `json:"-"`
 }
 
 type EnvTarget struct {
@@ -130,9 +132,36 @@ type scanner struct {
 	compose      []composeSignal
 	composeNames map[domain.ServiceName]bool
 	exclude      map[domain.ServiceName]bool
+	checkedByDir map[string][]string
+	composeFiles []string
 	composeSeen  bool
 	warnings     []string
 	visited      int
+}
+
+func (s *scanner) recordChecked(dir, rel string) {
+	for _, existing := range s.checkedByDir[dir] {
+		if existing == rel {
+			return
+		}
+	}
+	s.checkedByDir[dir] = append(s.checkedByDir[dir], rel)
+}
+
+func (s *scanner) recordCompose(rel string) {
+	for _, existing := range s.composeFiles {
+		if existing == rel {
+			return
+		}
+	}
+	s.composeFiles = append(s.composeFiles, rel)
+}
+
+func (s *scanner) checkedFor(dir string) []string {
+	out := append([]string{}, s.checkedByDir[dir]...)
+	out = append(out, s.composeFiles...)
+	sort.Strings(out)
+	return out
 }
 
 func skipDir(name string) bool {

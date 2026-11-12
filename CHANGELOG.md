@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `portucca prune` now also removes the current checkout's main reservation when its config
+  file is missing.
+- `portucca init --scan` gaps for a missing service port now list the files the scan
+  inspected, state that framework defaults are not assumed, and show how to declare the port.
+
 ### Fixed
 
 - The TUI no longer repeats config error codes (`config_invalid:`, `config_version:`,

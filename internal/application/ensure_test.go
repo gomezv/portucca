@@ -329,3 +329,33 @@ func TestEnsureIdempotent(t *testing.T) {
 		t.Fatalf("idempotent run changed: %+v saves=%d", got, reg.saves)
 	}
 }
+
+func TestEnsureKeepsMainWithoutConfig(t *testing.T) {
+	main := t.TempDir()
+	other := t.TempDir()
+	cfg := domain.Config{
+		Version: 1,
+		Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 3000, StartPort: 3001},
+		},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version:   2,
+		Worktrees: []domain.Claim{},
+		Mains: []domain.MainReservation{{
+			Project: "other", Path: other,
+			Ports: map[domain.ServiceName]domain.Port{"web": 18122},
+		}},
+	}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: main, MainRoot: main, IsMain: true}}, cfg, reg, &fakeEnv{})
+	if _, err := app.Ensure(context.Background(), main); err != nil {
+		t.Fatal(err)
+	}
+	for _, reservation := range reg.reg.Mains {
+		if reservation.Path == other {
+			return
+		}
+	}
+	t.Fatalf("mains = %+v, want the foreign reservation kept", reg.reg.Mains)
+}

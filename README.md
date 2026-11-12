@@ -164,7 +164,9 @@ The scan reads `package.json`, real `.env*` files and Compose files: `docker-com
 Example env files such as `.env.example` are only a fallback for `mainPort` when no real
 `.env*` file has a port signal, and that fallback emits a warning. If the scan cannot
 determine every required value, it writes nothing and lists the gaps; add `--project` or
-`--service` to fill them. `--scan` and `--preset` are mutually exclusive.
+`--service` to fill them. A missing port gap names the service and the files the scan
+inspected, and it reminds you that framework defaults (such as Next.js `3000`) are not
+assumed. `--scan` and `--preset` are mutually exclusive.
 
 By default Compose only enriches detected services. For a Compose-only repository, enable
 service discovery explicitly:
@@ -285,7 +287,7 @@ examples, and notes for each command.
 | `ensure` | Assigns or reuses the worktree ports, repairs env files, and writes the registry. |
 | `release [--service <name>]` | Releases the worktree claim, or one service, without deleting the worktree or touching env files. |
 | `reallocate` | Moves the worktree to new ports. This is the only command that changes a URL. |
-| `prune` | Removes claims for worktree directories that no longer exist. |
+| `prune` | Removes claims and main reservations whose directory no longer exists. It also removes the current main's reservation when its config file is missing. |
 | `doctor` | Read-only diagnostics. Exits `1` when `data.ok` is false. |
 | `env` | Prints the resolved ports and env values for the current worktree. |
 | `list` | Lists claims. Defaults to the current project; use `--all` or `--project <name>`. |

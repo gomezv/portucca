@@ -270,7 +270,7 @@ func mergeDetected(req InitRequest, det scan.Detected, explicit map[domain.Servi
 				if !hasPortGap(gaps, svc.Name) {
 					gaps = append(gaps, scan.Gap{
 						Field: "services." + string(svc.Name) + ".mainPort", Reason: "missing",
-						Message: "no port declaration found",
+						Message: missingPortMessage(svc),
 						Flags:   []string{fmt.Sprintf("--service %s:<main>:<start>", svc.Name)},
 						Service: svc.Name,
 					})
@@ -509,4 +509,32 @@ func parseServiceSpec(spec string) (domain.ServiceName, domain.Port, domain.Port
 		return "", 0, 0, fmt.Errorf("invalid start port in %q", spec)
 	}
 	return domain.ServiceName(parts[0]), domain.Port(main), domain.Port(start), nil
+}
+
+func missingPortMessage(svc scan.Service) string {
+	where := "the repository root"
+	if svc.Dir != "" && svc.Dir != "." {
+		where = "directory " + svc.Dir
+	}
+	checked := "no package.json, env files, or Compose signals were found"
+	if len(svc.Checked) > 0 {
+		checked = "checked " + joinEnglish(svc.Checked)
+	}
+	return fmt.Sprintf(
+		"no port declaration found for service %s at %s; %s; framework defaults are not assumed; add PORT=<port> to an env file or pass --service %s:<main>:<start> (example: --service %s:3000:3001)",
+		svc.Name, where, checked, svc.Name, svc.Name,
+	)
+}
+
+func joinEnglish(items []string) string {
+	switch len(items) {
+	case 0:
+		return ""
+	case 1:
+		return items[0]
+	case 2:
+		return items[0] + " and " + items[1]
+	default:
+		return strings.Join(items[:len(items)-1], ", ") + ", and " + items[len(items)-1]
+	}
 }

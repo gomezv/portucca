@@ -741,13 +741,17 @@ func TestTUIHelp(t *testing.T) {
 
 func TestPruneWorktreeRemovesCurrentMainWithoutConfig(t *testing.T) {
 	main := newGitWorktree(t)
+	mainPath, err := filepath.EvalSymlinks(main)
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg := filepath.Join(t.TempDir(), "ports.json")
-	raw := `{"version":2,"worktrees":[],"mains":[{"project":"app","path":"` + main + `","ports":{"web":18130},"updatedAt":"2026-11-10T00:00:00Z"}]}`
+	raw := `{"version":2,"worktrees":[],"mains":[{"project":"app","path":"` + mainPath + `","ports":{"web":18130},"updatedAt":"2026-11-10T00:00:00Z"}]}`
 	if err := os.WriteFile(reg, []byte(raw), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var out, errb bytes.Buffer
-	if code := Run([]string{"prune", "--worktree", main, "--registry", reg}, &out, &errb); code != 0 {
+	if code := Run([]string{"prune", "--worktree", mainPath, "--registry", reg}, &out, &errb); code != 0 {
 		t.Fatalf("exit = %d, out=%s err=%s", code, out.String(), errb.String())
 	}
 	data, err := os.ReadFile(reg)

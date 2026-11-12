@@ -92,7 +92,7 @@ the old claim once the old path no longer exists.
 
 > [!NOTE]
 > Portucca is available from `v0.1.0`. The `install.sh` and module commands below use the
-> latest release; pin a version with `PORTUCCA_VERSION` or `@v0.4.0`.
+> latest release; pin a version with `PORTUCCA_VERSION` or `@v0.5.0`.
 
 ### From source (current development builds)
 
@@ -120,7 +120,7 @@ curl -fsSL https://raw.githubusercontent.com/gomezv/portucca/main/install.sh | b
 Pin a version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gomezv/portucca/main/install.sh | PORTUCCA_VERSION=v0.4.0 bash
+curl -fsSL https://raw.githubusercontent.com/gomezv/portucca/main/install.sh | PORTUCCA_VERSION=v0.5.0 bash
 ```
 
 The script needs `curl`, `tar`, `install`, and either `sha256sum` or `shasum`. It detects

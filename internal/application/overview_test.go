@@ -173,7 +173,7 @@ func TestOverviewConfigInvalidRoot(t *testing.T) {
 func TestOverviewConfigVersion(t *testing.T) {
 	wtPath := t.TempDir()
 	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{{Project: "app", Path: wtPath, Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 5174}}}}}}
-	app, _ := overviewApp(t, reg, mapConfig{rootErr: map[string]error{wtPath: errors.New("config_version: 2")}}, &recordingLocker{})
+	app, _ := overviewApp(t, reg, mapConfig{rootErr: map[string]error{wtPath: errors.New("config_invalid: config_version: 2")}}, &recordingLocker{})
 	got, err := app.Overview(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -183,8 +183,10 @@ func TestOverviewConfigVersion(t *testing.T) {
 		t.Fatalf("issues = %+v, want config_invalid", row.Issues)
 	}
 	for _, issue := range row.Issues {
-		if strings.Contains(issue.Message, "config_version:") {
-			t.Fatalf("issue repeats the prefix: %+v", issue)
+		for _, prefix := range []string{"config_invalid:", "config_version:", "config_missing:"} {
+			if strings.Contains(issue.Message, prefix) {
+				t.Fatalf("issue repeats %q: %+v", prefix, issue)
+			}
 		}
 	}
 }

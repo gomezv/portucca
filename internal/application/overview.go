@@ -219,9 +219,16 @@ func configIssues(err error) []Issue {
 		}}
 	}
 	message := err.Error()
-	for _, prefix := range []string{"config_invalid: ", "config_version: ", "config_missing: "} {
-		if strings.HasPrefix(message, prefix) {
-			message = strings.TrimPrefix(message, prefix)
+	for {
+		trimmed := false
+		for _, prefix := range []string{"config_invalid: ", "config_version: ", "config_missing: "} {
+			if strings.HasPrefix(message, prefix) {
+				message = strings.TrimPrefix(message, prefix)
+				trimmed = true
+				break
+			}
+		}
+		if !trimmed {
 			break
 		}
 	}

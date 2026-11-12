@@ -233,6 +233,7 @@ func (m *Model) resize() {
 	m.table.SetColumns(columns(width))
 	m.detail.SetWidth(width)
 	m.detail.SetHeight(detailHeight)
+	m.rebuild()
 	m.syncDetail()
 }
 

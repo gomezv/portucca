@@ -208,6 +208,7 @@ Notes:
   - It requires an interactive terminal.
   - --json is not supported.
   - --worktree only selects the initial row.
+  - --config does not apply to the global snapshot.
 `,
 	"prune": `portucca prune — remove claims and main reservations for deleted paths
 

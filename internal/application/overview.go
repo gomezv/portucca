@@ -218,7 +218,13 @@ func configIssues(err error) []Issue {
 			Hint: "run portucca init in the main checkout",
 		}}
 	}
-	message := strings.TrimPrefix(err.Error(), "config_invalid: ")
+	message := err.Error()
+	for _, prefix := range []string{"config_invalid: ", "config_version: ", "config_missing: "} {
+		if strings.HasPrefix(message, prefix) {
+			message = strings.TrimPrefix(message, prefix)
+			break
+		}
+	}
 	return []Issue{{Code: "config_invalid", Message: message}}
 }
 

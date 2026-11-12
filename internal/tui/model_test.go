@@ -246,6 +246,24 @@ func TestPathTextKeepsTail(t *testing.T) {
 	}
 }
 
+func TestModelResizeRebuildsPaths(t *testing.T) {
+	ov := application.OverviewResult{RegistryVersion: 2, Worktrees: []application.OverviewWorktree{{
+		Project: "app", Path: "/home/user/projects/very/long/alpha", Kind: "worktree", Live: true,
+		Services: []application.OverviewService{{Name: "web", Port: 5174, MainPort: 5173, StartPort: 5174, InBand: true}},
+		Issues:   []application.Issue{},
+	}}}
+	m := New(ov, "", "", nil)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	rows := next.(Model).table.Rows()
+	if len(rows) != 1 {
+		t.Fatalf("rows = %+v", rows)
+	}
+	cell := rows[0][2]
+	if !strings.Contains(cell, "alpha") || lipgloss.Width(cell) > 13 {
+		t.Fatalf("path cell = %q, want the leaf within 13 columns", cell)
+	}
+}
+
 func TestModelMinimumSize(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 79, Height: 24}, {Width: 80, Height: 15}} {
 		m := New(overviewFixture(), "", "", nil)

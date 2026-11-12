@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The TUI no longer repeats config error codes (`config_invalid:`, `config_version:`,
+  `config_missing:`) in issue messages.
+
 ## [0.5.0] - 2026-11-12
 
 ### Added

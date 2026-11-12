@@ -182,12 +182,8 @@ func TestOverviewConfigVersion(t *testing.T) {
 	if !hasIssueCode(row.Issues, "config_invalid") {
 		t.Fatalf("issues = %+v, want config_invalid", row.Issues)
 	}
-	for _, issue := range row.Issues {
-		for _, prefix := range []string{"config_invalid:", "config_version:", "config_missing:"} {
-			if strings.Contains(issue.Message, prefix) {
-				t.Fatalf("issue repeats %q: %+v", prefix, issue)
-			}
-		}
+	if len(row.Issues) != 1 || row.Issues[0].Message != "unsupported config version 2" {
+		t.Fatalf("message = %+v, want the normalized cause", row.Issues)
 	}
 }
 

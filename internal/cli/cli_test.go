@@ -727,12 +727,12 @@ func TestTUIHelp(t *testing.T) {
 		t.Fatalf("exit = %d, err=%s", code, errb.String())
 	}
 	text := out.String()
-	for _, want := range []string{"refresh", "tab", "j/k", "ctrl+c"} {
+	for _, want := range []string{"refresh", "tab", "j/k", "ctrl+c", "actions", "ensure", "prune", "confirm"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help missing %q:\n%s", want, text)
 		}
 	}
-	for _, bad := range []string{"ensure", "reallocate", "prune", "mouse"} {
+	for _, bad := range []string{"mouse"} {
 		if strings.Contains(text, bad) {
 			t.Fatalf("help mentions %q:\n%s", bad, text)
 		}

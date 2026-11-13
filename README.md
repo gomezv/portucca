@@ -291,7 +291,7 @@ examples, and notes for each command.
 | `doctor` | Read-only diagnostics. Exits `1` when `data.ok` is false. |
 | `env` | Prints the resolved ports and env values for the current worktree. |
 | `list` | Lists claims. Defaults to the current project; use `--all` or `--project <name>`. |
-| `tui` | Opens a read-only dashboard of all projects, worktrees, claims, main reservations, ports, bands, and issues. |
+| `tui` | Opens an interactive dashboard of all projects, worktrees, claims, main reservations, ports, bands, and issues, with lifecycle actions on the selected row. |
 | `version` | Prints version, commit, OS, architecture, and schema version. |
 
 Global flags: `--json`, `--config <path>`, `--registry <path>`, `--worktree <path>`,
@@ -316,15 +316,23 @@ portucca version --json
 
 ## TUI
 
-`portucca tui` opens a read-only dashboard of every project in the registry: worktrees, main
-reservations, claims, ports, configured bands, and lightweight issues. It never writes the
-registry, env files, config, or worktrees; it only takes a shared lock to read.
+`portucca tui` opens a dashboard of every project in the registry: worktrees, main
+reservations, claims, ports, configured bands, and lightweight issues. The snapshot is
+read-only and takes a shared lock.
 
-Keys: `up`/`down` or `j`/`k` move, `tab` switches between the table and the detail pane, `r`
-refreshes, and `q` or `ctrl+c` quits. It also refreshes every 5 seconds.
+Keys: `up`/`down` or `j`/`k` move, `tab` switches between the table and the detail pane, `a`
+opens the lifecycle actions for the selected row, `r` refreshes, and `q` or `ctrl+c` quits. It
+also refreshes every 5 seconds.
+
+Actions are `ensure`, `setup`, `reallocate`, `release`, and `prune`; they run the same
+application commands as the CLI under an exclusive lock. The menu only offers actions that
+apply to the row (for example, a live main checkout cannot be released), and `setup`,
+`reallocate`, `release`, and `prune` ask for confirmation. `release` frees the whole claim.
+`prune` uses the selected row as its worktree. `init` and `run` are not available from the TUI.
 
 It requires an interactive terminal and does not support `--json`. `--worktree` only selects
-the initial row; `--config` does not apply to the global snapshot.
+the initial row; `--config` does not apply to the snapshot or the actions (each row resolves
+its own config).
 
 ## Configuration
 

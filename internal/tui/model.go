@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/gomezv/portucca/internal/apperr"
 	"github.com/gomezv/portucca/internal/application"
 )
 
@@ -54,11 +55,30 @@ type refreshErrMsg struct {
 	err error
 }
 
-// Model is the read-only dashboard state.
+type actionDoneMsg struct {
+	action  Action
+	path    string
+	summary string
+	err     error
+}
+
+type menuState struct {
+	items  []Action
+	cursor int
+	path   string
+}
+
+type confirmState struct {
+	action Action
+	path   string
+}
+
+// Model is the dashboard state.
 type Model struct {
 	overview    application.OverviewResult
 	registry    string
-	refresh     func(context.Context) (application.OverviewResult, error)
+	refresh     RefreshFunc
+	actions     ActionRunner
 	table       table.Model
 	detail      viewport.Model
 	entries     []application.OverviewWorktree
@@ -69,13 +89,20 @@ type Model struct {
 	err         error
 	lastRefresh time.Time
 	detailPath  string
+	menu        *menuState
+	confirm     *confirmState
+	running     string
+	runningPath string
+	notice      string
+	noticeErr   error
 }
 
-func New(overview application.OverviewResult, registryPath, focusPath string, refresh func(context.Context) (application.OverviewResult, error)) Model {
+func New(overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner) Model {
 	m := Model{
 		overview:    overview,
 		registry:    registryPath,
 		refresh:     refresh,
+		actions:     actions,
 		lastRefresh: time.Now(),
 		table: table.New(
 			table.WithColumns(columns(116)),
@@ -107,6 +134,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resize()
 		return m, nil
 	case tea.KeyPressMsg:
+		if m.running != "" {
+			return m, nil
+		}
+		if m.confirm != nil {
+			switch msg.String() {
+			case "y", "enter":
+				pending := m.confirm
+				m.confirm = nil
+				return m.startAction(pending.action, pending.path)
+			case "n", "esc":
+				m.confirm = nil
+			}
+			return m, nil
+		}
+		if m.menu != nil {
+			switch msg.String() {
+			case "esc":
+				m.menu = nil
+			case "j", "down":
+				if m.menu.cursor < len(m.menu.items)-1 {
+					m.menu.cursor++
+				}
+			case "k", "up":
+				if m.menu.cursor > 0 {
+					m.menu.cursor--
+				}
+			case "enter":
+				return m.chooseAction()
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -116,6 +174,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			m.focusDetail = !m.focusDetail
 			m.syncDetail()
+			return m, nil
+		case "a":
+			m.openMenu()
 			return m, nil
 		}
 		if m.focusDetail {
@@ -154,14 +215,95 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if path == "" || !m.selectPath(path) {
 			m.table.SetCursor(0)
 		}
+		if m.menu != nil && !m.hasPath(m.menu.path) {
+			m.menu = nil
+		}
+		if m.confirm != nil && !m.hasPath(m.confirm.path) {
+			m.confirm = nil
+		}
 		m.syncDetail()
 		return m, nil
 	case refreshErrMsg:
 		m.refreshing = false
+		if m.noticeErr == nil {
+			m.notice = ""
+		}
 		m.err = msg.err
 		return m, nil
+	case actionDoneMsg:
+		m.running = ""
+		m.runningPath = ""
+		m.notice = msg.summary
+		m.noticeErr = msg.err
+		return m, m.startRefresh()
 	}
 	return m, nil
+}
+
+func (m *Model) selectedEntry() (application.OverviewWorktree, bool) {
+	if len(m.entries) == 0 {
+		return application.OverviewWorktree{}, false
+	}
+	idx := m.table.Cursor()
+	if idx < 0 || idx >= len(m.entries) {
+		return application.OverviewWorktree{}, false
+	}
+	return m.entries[idx], true
+}
+
+func (m *Model) openMenu() {
+	if m.actions == nil {
+		return
+	}
+	w, ok := m.selectedEntry()
+	if !ok {
+		return
+	}
+	items := actionsFor(w)
+	if len(items) == 0 {
+		return
+	}
+	m.menu = &menuState{items: items, path: w.Path}
+}
+
+func (m *Model) hasPath(path string) bool {
+	target := canonical(path)
+	for _, w := range m.entries {
+		if canonical(w.Path) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Model) chooseAction() (Model, tea.Cmd) {
+	if m.menu == nil || m.menu.cursor < 0 || m.menu.cursor >= len(m.menu.items) {
+		m.menu = nil
+		return *m, nil
+	}
+	action := m.menu.items[m.menu.cursor]
+	path := m.menu.path
+	m.menu = nil
+	if actionNeedsConfirm(action) {
+		m.confirm = &confirmState{action: action, path: path}
+		return *m, nil
+	}
+	return m.startAction(action, path)
+}
+
+func (m *Model) startAction(action Action, path string) (Model, tea.Cmd) {
+	if path == "" || m.actions == nil {
+		return *m, nil
+	}
+	m.running = actionLabel(action)
+	m.runningPath = path
+	m.notice = ""
+	m.noticeErr = nil
+	runner := m.actions
+	return *m, func() tea.Msg {
+		summary, err := runner.Run(context.Background(), action, path)
+		return actionDoneMsg{action: action, path: path, summary: summary, err: err}
+	}
 }
 
 func (m Model) View() tea.View {
@@ -175,6 +317,15 @@ func (m Model) View() tea.View {
 		v.AltScreen = true
 		return v
 	}
+	if m.running != "" {
+		return m.modalView(m.runningView())
+	}
+	if m.confirm != nil {
+		return m.modalView(m.confirmView())
+	}
+	if m.menu != nil {
+		return m.modalView(m.menuView())
+	}
 	width := m.contentWidth()
 	body := padHeight(lipgloss.NewStyle().Width(width).Render(m.table.View()), m.table.Height()+2)
 	if len(m.entries) == 0 {
@@ -187,7 +338,7 @@ func (m Model) View() tea.View {
 		m.renderHeader(width),
 		body,
 		m.detail.View(),
-		footerText(width),
+		m.footerText(width),
 	)
 	content := frameStyle.Render(inner)
 	v := tea.NewView(content)
@@ -195,8 +346,73 @@ func (m Model) View() tea.View {
 	return v
 }
 
+func (m Model) modalView(content string) tea.View {
+	width := m.contentWidth()
+	if width > 72 {
+		width = 72
+	}
+	if width < 40 {
+		width = 40
+	}
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(accentColor).
+		Padding(1, 2).
+		Width(width).
+		Render(content)
+	v := tea.NewView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box))
+	v.AltScreen = true
+	return v
+}
+
+func (m Model) menuView() string {
+	lines := []string{accentStyle.Bold(true).Render("actions")}
+	if w, ok := m.selectedEntry(); ok {
+		lines[0] += mutedStyle.Render(" · " + string(w.Project) + " · " + w.Kind)
+		lines = append(lines, mutedStyle.Render(w.Path), "")
+	}
+	for i, action := range m.menu.items {
+		prefix, style := "  ", mutedStyle
+		if i == m.menu.cursor {
+			prefix, style = "› ", accentStyle.Bold(true)
+		}
+		lines = append(lines, style.Render(prefix+actionLabel(action))+"  "+mutedStyle.Render(actionDescription(action)))
+	}
+	lines = append(lines, "", mutedStyle.Render("enter run · esc cancel"))
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) confirmView() string {
+	lines := []string{accentStyle.Bold(true).Render("confirm " + actionLabel(m.confirm.action))}
+	if w, ok := m.selectedEntry(); ok {
+		lines = append(lines, mutedStyle.Render(w.Path))
+	}
+	lines = append(lines, "", actionConfirmText(m.confirm.action, m.confirm.path), "",
+		mutedStyle.Render("y confirm · n cancel"))
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) runningView() string {
+	return strings.Join([]string{
+		accentStyle.Bold(true).Render("running " + m.running),
+		mutedStyle.Render(m.runningPath),
+		"",
+		yellowStyle.Render("wait…"),
+	}, "\n")
+}
+
+func actionErrText(err error) string {
+	if ae, ok := apperr.As(err); ok {
+		if ae.Hint != "" {
+			return ae.Code + ": " + ae.Message + " — " + ae.Hint
+		}
+		return ae.Code + ": " + ae.Message
+	}
+	return err.Error()
+}
+
 func (m *Model) startRefresh() tea.Cmd {
-	if m.refreshing || m.refresh == nil {
+	if m.refreshing || m.running != "" || m.refresh == nil {
 		return nil
 	}
 	m.refreshing = true
@@ -513,11 +729,17 @@ func (m Model) renderHeader(width int) string {
 	left := accentStyle.Bold(true).Render("portucca tui") + "  " + mutedStyle.Render(counts)
 	line1 := joinSides(left, mutedStyle.Render("refreshed "+m.lastRefresh.Format("15:04:05")), width)
 	status := greenStyle.Render("● live")
-	if m.refreshing {
-		status = yellowStyle.Render("● refreshing…")
-	}
-	if m.err != nil {
+	switch {
+	case m.running != "":
+		status = yellowStyle.Render("● " + m.running + "…")
+	case m.noticeErr != nil:
+		status = redStyle.Render("✖ " + actionErrText(m.noticeErr))
+	case m.err != nil:
 		status = redStyle.Render("✖ " + m.err.Error())
+	case m.notice != "":
+		status = greenStyle.Render("● " + m.notice)
+	case m.refreshing:
+		status = yellowStyle.Render("● refreshing…")
 	}
 	line2 := joinSides(mutedStyle.Render("registry "+shortPath(m.registry)), status, width)
 	return line1 + "\n" + line2
@@ -543,15 +765,20 @@ func countLabel(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-func footerText(width int) string {
+func (m Model) footerText(width int) string {
 	key := accentStyle.Bold(true)
 	desc := mutedStyle
 	parts := []string{
 		key.Render("↑↓ jk") + desc.Render(" move"),
 		key.Render("tab") + desc.Render(" details"),
-		key.Render("r") + desc.Render(" refresh"),
-		key.Render("q") + desc.Render(" quit"),
 	}
+	if m.actions != nil && len(m.entries) > 0 {
+		parts = append(parts, key.Render("a")+desc.Render(" actions"))
+	}
+	parts = append(parts,
+		key.Render("r")+desc.Render(" refresh"),
+		key.Render("q")+desc.Render(" quit"),
+	)
 	return truncateWidth(strings.Join(parts, desc.Render("  ·  ")), width)
 }
 
@@ -567,8 +794,8 @@ func boolText(v bool) string {
 }
 
 // Run starts the Bubble Tea program. It returns when the user quits.
-func Run(in io.Reader, out io.Writer, overview application.OverviewResult, registryPath, focusPath string, refresh func(context.Context) (application.OverviewResult, error)) error {
-	p := tea.NewProgram(New(overview, registryPath, focusPath, refresh), tea.WithInput(in), tea.WithOutput(out))
+func Run(in io.Reader, out io.Writer, overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner) error {
+	p := tea.NewProgram(New(overview, registryPath, focusPath, refresh, actions), tea.WithInput(in), tea.WithOutput(out))
 	_, err := p.Run()
 	return err
 }

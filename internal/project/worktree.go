@@ -31,6 +31,18 @@ func ListWorktrees(root string) ([]Worktree, error) {
 	if err != nil {
 		return nil, ErrNotRepo
 	}
+	worktrees := parseWorktrees(out)
+	for i := range worktrees {
+		if real, err := platform.RealPath(worktrees[i].Path); err == nil {
+			worktrees[i].Path = real
+		} else if abs, err := filepath.Abs(worktrees[i].Path); err == nil {
+			worktrees[i].Path = abs
+		}
+	}
+	return worktrees, nil
+}
+
+func parseWorktrees(out string) []Worktree {
 	var worktrees []Worktree
 	for _, block := range strings.Split(out, "\n\n") {
 		var wt Worktree
@@ -50,15 +62,9 @@ func ListWorktrees(root string) ([]Worktree, error) {
 				wt.Prunable = true
 			}
 		}
-		if wt.Path == "" {
-			continue
+		if wt.Path != "" {
+			worktrees = append(worktrees, wt)
 		}
-		if real, err := platform.RealPath(wt.Path); err == nil {
-			wt.Path = real
-		} else if abs, err := filepath.Abs(wt.Path); err == nil {
-			wt.Path = abs
-		}
-		worktrees = append(worktrees, wt)
 	}
-	return worktrees, nil
+	return worktrees
 }

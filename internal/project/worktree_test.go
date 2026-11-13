@@ -50,14 +50,9 @@ func TestListWorktreesFlags(t *testing.T) {
 	run(t, main, "commit", "-qm", "init")
 	locked := filepath.Join(t.TempDir(), "locked")
 	detached := filepath.Join(t.TempDir(), "detached")
-	prunable := filepath.Join(t.TempDir(), "prunable")
 	run(t, main, "worktree", "add", "-q", locked, "-b", "locked")
 	run(t, main, "worktree", "add", "-q", "--detach", detached)
-	run(t, main, "worktree", "add", "-q", prunable, "-b", "prunable")
 	run(t, main, "worktree", "lock", locked)
-	if err := os.RemoveAll(prunable); err != nil {
-		t.Fatal(err)
-	}
 
 	got, err := ListWorktrees(main)
 	if err != nil {
@@ -73,7 +68,42 @@ func TestListWorktreesFlags(t *testing.T) {
 	if !found[canonicalPath(detached)].Detached {
 		t.Fatalf("detached worktree = %+v", found[canonicalPath(detached)])
 	}
-	if !found[canonicalPath(prunable)].Prunable {
-		t.Fatalf("prunable worktree = %+v", found[canonicalPath(prunable)])
+}
+
+func TestParseWorktrees(t *testing.T) {
+	out := `worktree /repo/main
+HEAD abc
+branch refs/heads/main
+
+worktree /repo/locked
+HEAD def
+branch refs/heads/locked
+locked reason
+
+worktree /repo/detached
+HEAD 123
+detached
+
+worktree /repo/gone
+HEAD 456
+branch refs/heads/gone
+prunable gitdir file points to non-existent location
+`
+	got := parseWorktrees(out)
+	if len(got) != 4 {
+		t.Fatalf("worktrees = %+v", got)
+	}
+	byPath := map[string]Worktree{}
+	for _, wt := range got {
+		byPath[wt.Path] = wt
+	}
+	if !byPath["/repo/locked"].Locked || byPath["/repo/locked"].Branch != "locked" {
+		t.Fatalf("locked = %+v", byPath["/repo/locked"])
+	}
+	if !byPath["/repo/detached"].Detached {
+		t.Fatalf("detached = %+v", byPath["/repo/detached"])
+	}
+	if !byPath["/repo/gone"].Prunable {
+		t.Fatalf("prunable = %+v", byPath["/repo/gone"])
 	}
 }

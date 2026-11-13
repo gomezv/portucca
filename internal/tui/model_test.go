@@ -39,7 +39,7 @@ func overviewFixture() application.OverviewResult {
 
 func projectsModel(t *testing.T, ov application.OverviewResult) Model {
 	t.Helper()
-	m := New(ov, "/tmp/ports.json", "", nil, nil, nil)
+	m := New(ov, "/tmp/ports.json", "", nil, nil, nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return next.(Model)
 }
@@ -218,7 +218,7 @@ func TestModelSelectionFallback(t *testing.T) {
 }
 
 func TestModelEightyColumns(t *testing.T) {
-	m := New(overviewFixture(), "/home/user/.local/state/portucca/ports.json", "", nil, nil, nil)
+	m := New(overviewFixture(), "/home/user/.local/state/portucca/ports.json", "", nil, nil, nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -280,7 +280,7 @@ func TestModelResizeRebuildsPaths(t *testing.T) {
 		Services: []application.OverviewService{{Name: "web", Port: 5174, MainPort: 5173, StartPort: 5174, InBand: true}},
 		Issues:   []application.Issue{},
 	}}}
-	m := New(ov, "", "", nil, nil, nil)
+	m := New(ov, "", "", nil, nil, nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -297,13 +297,13 @@ func TestModelResizeRebuildsPaths(t *testing.T) {
 
 func TestModelMinimumSize(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 79, Height: 24}, {Width: 80, Height: 15}} {
-		m := New(overviewFixture(), "", "", nil, nil, nil)
+		m := New(overviewFixture(), "", "", nil, nil, nil, nil, nil)
 		next, _ := m.Update(size)
 		if !strings.Contains(next.(Model).View().Content, "too small") {
 			t.Fatalf("%dx%d did not report too small", size.Width, size.Height)
 		}
 	}
-	m := New(overviewFixture(), "", "", nil, nil, nil)
+	m := New(overviewFixture(), "", "", nil, nil, nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
 	view := next.(Model).View().Content
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
@@ -325,7 +325,7 @@ func TestModelEmpty(t *testing.T) {
 }
 
 func TestModelTooSmall(t *testing.T) {
-	m := New(overviewFixture(), "/tmp/ports.json", "", nil, nil, nil)
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, nil, nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 20, Height: 5})
 	if !strings.Contains(next.(Model).View().Content, "too small") {
 		t.Fatalf("view = %s", next.(Model).View().Content)
@@ -348,9 +348,48 @@ func (f *fakeActions) Run(_ context.Context, action Action, worktree string) (st
 	return f.summary, f.err
 }
 
+type fakeWrapper struct {
+	change application.DevScriptChange
+	err    error
+	calls  []string
+}
+
+func (f *fakeWrapper) Preview(context.Context, string) (application.DevScriptChange, error) {
+	f.calls = append(f.calls, "preview")
+	return f.change, f.err
+}
+
+func (f *fakeWrapper) Apply(context.Context, string) (application.DevScriptChange, error) {
+	f.calls = append(f.calls, "apply")
+	return f.change, f.err
+}
+
+type fakeRunner struct {
+	plan     application.RunPlan
+	err      error
+	commands [][]string
+}
+
+func (f *fakeRunner) Prepare(_ context.Context, _ string, command []string) (application.RunPlan, error) {
+	f.commands = append(f.commands, command)
+	return f.plan, f.err
+}
+
+func fullActionModel(t *testing.T, actions ActionRunner, wrapper DevWrapper, runner RunPreparer, row int) Model {
+	t.Helper()
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, nil, wrapper, runner)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	m.table.SetCursor(row)
+	m.syncDetail()
+	return m
+}
+
 func actionModel(t *testing.T, actions ActionRunner, row int) Model {
 	t.Helper()
-	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, nil)
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -361,13 +400,13 @@ func actionModel(t *testing.T, actions ActionRunner, row int) Model {
 }
 
 func TestModelActionMenu(t *testing.T) {
-	m := actionModel(t, &fakeActions{}, 0)
+	m := fullActionModel(t, &fakeActions{}, &fakeWrapper{}, &fakeRunner{}, 0)
 	next, _ := m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	m = next.(Model)
 	if m.menu == nil {
 		t.Fatal("menu = nil, want actions")
 	}
-	if len(m.menu.items) != 3 || m.menu.items[0] != ActionEnsure || m.menu.items[2] != ActionPrune {
+	if len(m.menu.items) != 5 || m.menu.items[0] != ActionEnsure || m.menu.items[2] != ActionPrune {
 		t.Fatalf("main menu = %v", m.menu.items)
 	}
 	view := m.View().Content
@@ -383,10 +422,10 @@ func TestModelActionMenu(t *testing.T) {
 		t.Fatal("menu still open after esc")
 	}
 
-	m = actionModel(t, &fakeActions{}, 1)
+	m = fullActionModel(t, &fakeActions{}, &fakeWrapper{}, &fakeRunner{}, 1)
 	next, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	m = next.(Model)
-	if len(m.menu.items) != 5 || m.menu.items[3] != ActionRelease {
+	if len(m.menu.items) != 7 || m.menu.items[3] != ActionRelease {
 		t.Fatalf("worktree menu = %v", m.menu.items)
 	}
 }
@@ -463,7 +502,7 @@ func TestModelActionPrune(t *testing.T) {
 	ov := overviewFixture()
 	ov.Worktrees[0].Issues = []application.Issue{{Code: "config_missing", Message: "portucca.json is missing"}}
 	actions := &fakeActions{summary: "prune: removed=1 mains=1"}
-	m := New(ov, "/tmp/ports.json", "", nil, actions, nil)
+	m := New(ov, "/tmp/ports.json", "", nil, actions, nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -615,7 +654,7 @@ func TestModelProjects(t *testing.T) {
 }
 
 func TestModelFocusPath(t *testing.T) {
-	m := New(projectsFixture(), "/tmp/ports.json", "/tmp/wt", nil, nil, nil)
+	m := New(projectsFixture(), "/tmp/ports.json", "/tmp/wt", nil, nil, nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	if m.level != levelProject || m.project != "app" || m.selectedPath() != "/tmp/wt" {
@@ -627,7 +666,7 @@ func TestModelDiscoveryScope(t *testing.T) {
 	discover := &fakeDiscoverer{result: application.DiscoveryResult{Worktrees: []application.DiscoveredWorktree{{
 		Project: "app", Path: "/tmp/new", Branch: "feature", MainRoot: "/tmp/main",
 	}}}}
-	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover)
+	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	if len(discover.calls) != 0 {
@@ -659,7 +698,7 @@ func TestModelUnregisteredOnlySetup(t *testing.T) {
 	discover := &fakeDiscoverer{result: application.DiscoveryResult{Worktrees: []application.DiscoveredWorktree{{
 		Project: "app", Path: "/tmp/new", Branch: "feature", MainRoot: "/tmp/main",
 	}}}}
-	m := New(projectsFixture(), "/tmp/ports.json", "", nil, actions, discover)
+	m := New(projectsFixture(), "/tmp/ports.json", "", nil, actions, discover, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -680,7 +719,7 @@ func TestModelUnregisteredOnlySetup(t *testing.T) {
 
 func TestModelDiscoveryError(t *testing.T) {
 	discover := &fakeDiscoverer{err: errors.New("git boom")}
-	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover)
+	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -697,7 +736,7 @@ func TestModelUnregisteredSetup(t *testing.T) {
 	discover := &fakeDiscoverer{result: application.DiscoveryResult{Worktrees: []application.DiscoveredWorktree{{
 		Project: "app", Path: "/tmp/new", Branch: "feature", MainRoot: "/tmp/main",
 	}}}}
-	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, discover)
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, discover, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -746,5 +785,112 @@ func TestModelProjectsSelection(t *testing.T) {
 	updated, _ := m.Update(refreshMsg{overview: next})
 	if updated.(Model).level != levelProjects {
 		t.Fatalf("level = %v, want projects after the project disappeared", updated.(Model).level)
+	}
+}
+
+func TestModelWrap(t *testing.T) {
+	wrapper := &fakeWrapper{change: application.DevScriptChange{
+		Path: "/tmp/package.json", Before: "next dev", After: "portucca run -- next dev", Changed: true,
+	}}
+	m := fullActionModel(t, &fakeActions{}, wrapper, &fakeRunner{}, 0)
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m = next.(Model)
+	for m.menu.cursor < 4 {
+		next, _ = m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+		m = next.(Model)
+	}
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil || m.running != "wrap dev" {
+		t.Fatalf("cmd = %v running = %q", cmd, m.running)
+	}
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if m.wrapChange == nil || !strings.Contains(m.View().Content, "portucca run -- next dev") {
+		t.Fatalf("wrap preview missing: %+v", m.wrapChange)
+	}
+	next, _ = m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
+	m = next.(Model)
+	if m.wrapChange != nil || len(wrapper.calls) != 1 {
+		t.Fatalf("cancel changed state: %+v calls=%v", m.wrapChange, wrapper.calls)
+	}
+
+	// Apply the preview.
+	next, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m = next.(Model)
+	for m.menu.cursor < 4 {
+		next, _ = m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+		m = next.(Model)
+	}
+	next, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	next, cmd = m.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("apply did not start")
+	}
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if m.notice != "wrap: dev script updated" || len(wrapper.calls) != 3 {
+		t.Fatalf("notice = %q calls=%v", m.notice, wrapper.calls)
+	}
+}
+
+func TestModelRun(t *testing.T) {
+	runner := &fakeRunner{plan: application.RunPlan{
+		Path: "/usr/bin/npm", Args: []string{"npm", "run", "dev"}, Env: []string{"PORT=3002"},
+	}}
+	m := fullActionModel(t, &fakeActions{}, &fakeWrapper{}, runner, 0)
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m = next.(Model)
+	for m.menu.cursor < 3 {
+		next, _ = m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+		m = next.(Model)
+	}
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if !m.runActive {
+		t.Fatal("run input did not open")
+	}
+	m.runInput = "npm run dev"
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil || m.running != "run" {
+		t.Fatalf("cmd = %v running = %q", cmd, m.running)
+	}
+	next, cmd = m.Update(cmd())
+	m = next.(Model)
+	if len(runner.commands) != 1 || strings.Join(runner.commands[0], " ") != "sh -c npm run dev" {
+		t.Fatalf("commands = %v", runner.commands)
+	}
+	if cmd == nil {
+		t.Fatal("run preparation did not produce an exec command")
+	}
+	if m.lastRun != "npm run dev" {
+		t.Fatalf("lastRun = %q", m.lastRun)
+	}
+}
+
+func TestModelRunDone(t *testing.T) {
+	m := fullActionModel(t, &fakeActions{}, &fakeWrapper{}, &fakeRunner{}, 0)
+	next, _ := m.Update(runDoneMsg{})
+	m = next.(Model)
+	if m.notice != "run: finished" {
+		t.Fatalf("notice = %q", m.notice)
+	}
+	next, _ = m.Update(runDoneMsg{err: errors.New("exit 1")})
+	m = next.(Model)
+	if m.noticeErr == nil {
+		t.Fatal("run error was not stored")
+	}
+}
+
+func TestRunCommandFields(t *testing.T) {
+	plan := application.RunPlan{Path: "/usr/bin/npm", Args: []string{"npm", "run", "dev"}, Env: []string{"PORT=3002"}}
+	cmd := runCommand(plan, "/repo/wt")
+	if cmd.Path != plan.Path || cmd.Dir != "/repo/wt" || strings.Join(cmd.Args, " ") != "npm run dev" || cmd.Env[0] != "PORT=3002" {
+		t.Fatalf("cmd = %+v", cmd)
 	}
 }

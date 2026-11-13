@@ -64,3 +64,35 @@ func (a tuiActions) Run(ctx context.Context, action tui.Action, worktree string)
 		return "", fmt.Errorf("unknown action %q", action)
 	}
 }
+
+type tuiWrapper struct {
+	app *application.App
+}
+
+func newTUIWrapper(app *application.App) tui.DevWrapper {
+	copied := *app
+	copied.ConfigFile = ""
+	return tuiWrapper{app: &copied}
+}
+
+func (w tuiWrapper) Preview(ctx context.Context, worktree string) (application.DevScriptChange, error) {
+	return w.app.PreviewDevWrap(ctx, worktree)
+}
+
+func (w tuiWrapper) Apply(ctx context.Context, worktree string) (application.DevScriptChange, error) {
+	return w.app.ApplyDevWrap(ctx, worktree)
+}
+
+type tuiRunner struct {
+	app *application.App
+}
+
+func newTUIRunner(app *application.App) tui.RunPreparer {
+	copied := *app
+	copied.ConfigFile = ""
+	return tuiRunner{app: &copied}
+}
+
+func (r tuiRunner) Prepare(ctx context.Context, worktree string, command []string) (application.RunPlan, error) {
+	return r.app.PrepareRun(ctx, application.RunRequest{Worktree: worktree, Command: command})
+}

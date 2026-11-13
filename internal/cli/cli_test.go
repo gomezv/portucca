@@ -727,7 +727,7 @@ func TestTUIHelp(t *testing.T) {
 		t.Fatalf("exit = %d, err=%s", code, errb.String())
 	}
 	text := out.String()
-	for _, want := range []string{"refresh", "tab", "j/k", "ctrl+c", "actions", "ensure", "prune", "confirm", "projects", "Discovery", "enter"} {
+	for _, want := range []string{"refresh", "tab", "j/k", "ctrl+c", "actions", "ensure", "prune", "confirm", "projects", "Discovery", "enter", "wrap dev", "run"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help missing %q:\n%s", want, text)
 		}
@@ -801,5 +801,49 @@ func TestWatchHelp(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("help missing %q:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestInitWrapUsage(t *testing.T) {
+	for _, args := range [][]string{
+		{"init", "--wrap-script"},
+		{"init", "--scan", "--wrap-script", "--no-wrap"},
+	} {
+		var out, errb bytes.Buffer
+		if code := Run(args, &out, &errb); code != 2 {
+			t.Fatalf("%v exit = %d, want 2: %s", args, code, errb.String())
+		}
+	}
+}
+
+func TestInitHelpWrap(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := Run([]string{"help", "init"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d: %s", code, errb.String())
+	}
+	for _, want := range []string{"--wrap-script", "--no-wrap"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("help missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestInitWrapPrompt(t *testing.T) {
+	change := application.DevScriptChange{Before: "next dev", After: "portucca run -- next dev", Changed: true}
+	for input, want := range map[string]bool{"y\n": true, "yes\n": true, "n\n": false, "": false} {
+		var out bytes.Buffer
+		if got := confirmDevWrap(change, strings.NewReader(input), &out); got != want {
+			t.Fatalf("input %q = %v, want %v", input, got, want)
+		}
+		if !strings.Contains(out.String(), "next dev") {
+			t.Fatalf("prompt missing diff: %s", out.String())
+		}
+	}
+}
+
+func TestInitWrapNoScan(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := Run([]string{"init", "--no-wrap"}, &out, &errb); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
 	}
 }

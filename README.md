@@ -168,6 +168,11 @@ determine every required value, it writes nothing and lists the gaps; add `--pro
 inspected, and it reminds you that framework defaults (such as Next.js `3000`) are not
 assumed. `--scan` and `--preset` are mutually exclusive.
 
+For Next.js projects, plain `npm run dev` ignores the `PORT` in `.env`. `init --scan` can wrap
+`scripts.dev` as `portucca run -- <original>` so the script uses the assigned port. Use
+`--wrap-script` to apply it, `--no-wrap` to skip it, or answer the confirmation prompt. The
+change is written to `package.json`.
+
 By default Compose only enriches detected services. For a Compose-only repository, enable
 service discovery explicitly:
 
@@ -326,11 +331,13 @@ Keys: `up`/`down` or `j`/`k` move, `enter`/`l` opens a project, `esc`/`h` goes b
 switches between the table and the detail pane, `a` opens lifecycle actions for the selected
 row, `r` refreshes, and `q` or `ctrl+c` quits. It also refreshes every 5 seconds.
 
-Actions are `ensure`, `setup`, `reallocate`, `release`, and `prune`; they run the same
+Actions are `ensure`, `setup`, `reallocate`, `release`, `prune`, `run`, and `wrap dev`; they run the same
 application commands as the CLI under an exclusive lock. The menu only offers actions that
 apply to the row (a discovered worktree offers `setup`; a live main checkout cannot be
 released), and `setup`, `reallocate`, `release`, and `prune` ask for confirmation. `release`
-frees the whole claim. `prune` uses the selected row as its worktree. `init` and `run` are not
+frees the whole claim. `prune` uses the selected row as its worktree. `run` prompts for a command, executes it in
+the row directory with the resolved environment, and suspends the TUI until it exits. `wrap
+dev` previews the `package.json` change and applies it only after confirmation. `init` is not
 available from the TUI.
 
 It requires an interactive terminal and does not support `--json`. `--worktree` opens the

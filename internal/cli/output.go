@@ -117,6 +117,13 @@ func writeHuman(w io.Writer, cmd string, data any, err error) {
 				fmt.Fprintf(w, "warning: %s\n", warning)
 			}
 		}
+		if v.PackageScript != nil {
+			state := "proposed"
+			if v.PackageScript.Changed {
+				state = "applied"
+			}
+			fmt.Fprintf(w, "package.json: %s -> %s (%s)\n", v.PackageScript.Before, v.PackageScript.After, state)
+		}
 	default:
 		fmt.Fprintf(w, "%v\n", v)
 	}

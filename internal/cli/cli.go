@@ -141,6 +141,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 	var initForce bool
 	var initScan bool
 	var initCompose bool
+	var initWrap, initNoWrap bool
 	var excludeServices stringList
 	var services stringList
 	var runService string
@@ -161,6 +162,8 @@ func execute(cmd string, args []string) (any, bool, error) {
 		fs.BoolVar(&initForce, "force", false, "")
 		fs.BoolVar(&initScan, "scan", false, "")
 		fs.BoolVar(&initCompose, "compose", false, "")
+		fs.BoolVar(&initWrap, "wrap-script", false, "")
+		fs.BoolVar(&initNoWrap, "no-wrap", false, "")
 		fs.Var(&excludeServices, "exclude-service", "")
 		fs.Var(&services, "service", "")
 	case "watch":
@@ -205,6 +208,12 @@ func execute(cmd string, args []string) (any, bool, error) {
 		return nil, g.json, apperr.New("usage", "--all and --project are mutually exclusive", "")
 	}
 	if cmd == "init" {
+		if initWrap && initNoWrap {
+			return nil, g.json, apperr.New("usage", "--wrap-script and --no-wrap are mutually exclusive", "drop one of them")
+		}
+		if (initWrap || initNoWrap) && !initScan {
+			return nil, g.json, apperr.New("usage", "--wrap-script and --no-wrap require --scan", "add --scan")
+		}
 		if initScan && initPreset != "" {
 			return nil, g.json, apperr.New("usage", "--scan and --preset are mutually exclusive", "drop one of them")
 		}
@@ -289,7 +298,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 		if worktreeSet {
 			focus = g.worktree
 		}
-		if err := tui.Run(os.Stdin, os.Stdout, overview, regPath, focus, app.Overview, newTUIActions(app), newTUIDiscoverer(app)); err != nil {
+		if err := tui.Run(os.Stdin, os.Stdout, overview, regPath, focus, app.Overview, newTUIActions(app), newTUIDiscoverer(app), newTUIWrapper(app), newTUIRunner(app)); err != nil {
 			return nil, g.json, apperr.New("internal", err.Error(), "retry in an interactive terminal")
 		}
 		return nil, g.json, nil
@@ -306,10 +315,16 @@ func execute(cmd string, args []string) (any, bool, error) {
 		data, err := app.List(ctx, g.worktree, projectFlag, all)
 		return data, g.json, err
 	case "init":
+		wrap := initWrap
+		if initScan && !initWrap && !initNoWrap && !g.json && tui.IsTerminal(os.Stdin) {
+			if change, err := app.PreviewDevWrap(ctx, g.worktree); err == nil && change.Changed {
+				wrap = confirmDevWrap(change, os.Stdin, os.Stderr)
+			}
+		}
 		data, err := app.Init(ctx, application.InitRequest{
 			Project: initProject, Services: services, Preset: initPreset, Force: initForce,
 			Scan: initScan, Compose: initCompose, ExcludeServices: excludeServices,
-			Worktree: g.worktree, ConfigPath: g.config,
+			WrapScript: wrap, Worktree: g.worktree, ConfigPath: g.config,
 		})
 		return data, g.json, err
 	case "run":

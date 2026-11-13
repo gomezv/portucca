@@ -67,6 +67,8 @@ Flags:
   --project <slug>       Project slug (required without --scan)
   --service <spec>       Service as name:mainPort:startPort (repeatable; required without --scan)
   --preset <name>        generic (default), node-vite-nest, or next
+  --wrap-script          Wrap scripts.dev as portucca run -- <original> (requires --scan)
+  --no-wrap              Do not wrap scripts.dev
   --force                Overwrite an existing portucca.json
 
 What it does:
@@ -75,7 +77,8 @@ What it does:
   .env* and Compose JSON/YAML; --compose discovers services from Compose.
   Explicit flags override detected values.
   In a worktree it does not touch the registry; in the main checkout it
-  publishes the mainPort reservation.
+  publishes the mainPort reservation. With --scan and a TTY it offers to wrap
+  scripts.dev; --wrap-script applies it and --no-wrap skips it.
 
 Examples:
   portucca init --project app --service web:5173:5174
@@ -210,12 +213,14 @@ Keys:
   q, ctrl+c       quit
 
 Actions:
-  - ensure, setup, reallocate, release and prune
+  - ensure, setup, reallocate, release, prune, run and wrap dev
   - discovered worktrees offer setup only until they have a claim
   - the menu only offers actions that apply to the row
   - setup, reallocate, release and prune ask for confirmation
   - release frees the whole claim; prune uses the selected row as --worktree
-  - init and run are not available from the TUI
+  - run prompts for a command and suspends the TUI until it exits
+  - wrap dev shows the package.json diff and applies it after confirmation
+  - init is not available from the TUI
 
 Discovery:
   - only the open project is scanned with git worktree list

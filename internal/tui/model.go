@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 
 	"github.com/gomezv/portucca/internal/apperr"
 	"github.com/gomezv/portucca/internal/application"
+	"github.com/gomezv/portucca/internal/domain"
 )
 
 const (
@@ -73,19 +75,32 @@ type confirmState struct {
 	path   string
 }
 
+type discoverMsg struct {
+	project domain.Project
+	result  application.DiscoveryResult
+	err     error
+}
+
 // Model is the dashboard state.
 type Model struct {
 	overview    application.OverviewResult
 	registry    string
 	refresh     RefreshFunc
 	actions     ActionRunner
+	discover    Discoverer
 	table       table.Model
 	detail      viewport.Model
 	entries     []application.OverviewWorktree
+	projects    []projectSummary
+	discovered  []application.OverviewWorktree
+	level       viewLevel
+	project     domain.Project
 	width       int
 	height      int
 	focusDetail bool
 	refreshing  bool
+	discovering bool
+	discoverErr error
 	err         error
 	lastRefresh time.Time
 	detailPath  string
@@ -97,15 +112,17 @@ type Model struct {
 	noticeErr   error
 }
 
-func New(overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner) Model {
+func New(overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer) Model {
 	m := Model{
 		overview:    overview,
 		registry:    registryPath,
 		refresh:     refresh,
 		actions:     actions,
+		discover:    discover,
+		level:       levelProjects,
 		lastRefresh: time.Now(),
 		table: table.New(
-			table.WithColumns(columns(116)),
+			table.WithColumns(projectColumns()),
 			table.WithRows([]table.Row{}),
 			table.WithWidth(116),
 			table.WithHeight(15),
@@ -115,23 +132,42 @@ func New(overview application.OverviewResult, registryPath, focusPath string, re
 		detail: viewport.New(viewport.WithWidth(116), viewport.WithHeight(8)),
 	}
 	m.rebuild()
-	if !m.selectPath(focusPath) {
-		m.table.SetCursor(0)
+	if focusPath != "" {
+		for _, entry := range m.overview.Worktrees {
+			if canonical(entry.Path) == canonical(focusPath) {
+				m.level = levelProject
+				m.project = entry.Project
+				m.rebuild()
+				m.selectPath(focusPath)
+				break
+			}
+		}
 	}
 	m.syncDetail()
 	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Tick(refreshInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
+	tick := tea.Tick(refreshInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
+	if m.level == levelProject {
+		if discover := m.startDiscovery(); discover != nil {
+			return tea.Batch(tick, discover)
+		}
+	}
+	return tick
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		path := m.selectedPath()
 		m.width = msg.Width
 		m.height = msg.Height
 		m.resize()
+		if m.level == levelProject && path != "" {
+			m.selectPath(path)
+		}
+		m.syncDetail()
 		return m, nil
 	case tea.KeyPressMsg:
 		if m.running != "" {
@@ -165,6 +201,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.level == levelProjects {
+			switch msg.String() {
+			case "enter", "l":
+				return m.openProject()
+			}
+		} else {
+			switch msg.String() {
+			case "esc", "h":
+				m.backToProjects()
+				return m, nil
+			}
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -176,7 +224,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.syncDetail()
 			return m, nil
 		case "a":
-			m.openMenu()
+			if m.level == levelProject {
+				m.openMenu()
+			}
 			return m, nil
 		}
 		if m.focusDetail {
@@ -210,10 +260,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		m.lastRefresh = time.Now()
 		path := m.selectedPath()
+		project := m.project
+		if m.level == levelProjects {
+			project = m.selectedProject()
+		}
 		m.overview = msg.overview
+		if m.level == levelProject && !hasOverviewProject(msg.overview.Worktrees, m.project) {
+			m.level = levelProjects
+			m.project = ""
+			m.discovered = nil
+			m.discoverErr = nil
+		}
 		m.rebuild()
-		if path == "" || !m.selectPath(path) {
-			m.table.SetCursor(0)
+		if m.level == levelProject {
+			if path == "" || !m.selectPath(path) {
+				m.table.SetCursor(0)
+			}
+		} else {
+			m.selectProject(project)
 		}
 		if m.menu != nil && !m.hasPath(m.menu.path) {
 			m.menu = nil
@@ -222,6 +286,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.confirm = nil
 		}
 		m.syncDetail()
+		if m.level == levelProject {
+			return m, m.startDiscovery()
+		}
 		return m, nil
 	case refreshErrMsg:
 		m.refreshing = false
@@ -236,8 +303,112 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notice = msg.summary
 		m.noticeErr = msg.err
 		return m, m.startRefresh()
+	case discoverMsg:
+		m.discovering = false
+		if m.level != levelProject || msg.project != m.project {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.discoverErr = msg.err
+			m.discovered = nil
+		} else {
+			m.discoverErr = nil
+			m.discovered = discoveryRows(msg.result)
+			if len(msg.result.Issues) > 0 {
+				issue := msg.result.Issues[0]
+				m.discoverErr = fmt.Errorf("%s: %s", issue.Code, issue.Message)
+			}
+		}
+		path := m.selectedPath()
+		m.rebuild()
+		if path == "" || !m.selectPath(path) {
+			m.table.SetCursor(0)
+		}
+		if m.menu != nil && !m.hasPath(m.menu.path) {
+			m.menu = nil
+		}
+		if m.confirm != nil && !m.hasPath(m.confirm.path) {
+			m.confirm = nil
+		}
+		m.syncDetail()
+		return m, nil
 	}
 	return m, nil
+}
+
+func (m *Model) selectedProject() domain.Project {
+	if len(m.projects) == 0 {
+		return ""
+	}
+	idx := m.table.Cursor()
+	if idx < 0 || idx >= len(m.projects) {
+		return ""
+	}
+	return m.projects[idx].Project
+}
+
+func (m *Model) selectProject(project domain.Project) {
+	if project == "" {
+		return
+	}
+	for i, summary := range m.projects {
+		if summary.Project == project {
+			m.table.SetCursor(i)
+			return
+		}
+	}
+}
+
+func hasOverviewProject(entries []application.OverviewWorktree, project domain.Project) bool {
+	for _, entry := range entries {
+		if entry.Project == project {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Model) openProject() (tea.Model, tea.Cmd) {
+	project := m.selectedProject()
+	if project == "" {
+		return *m, nil
+	}
+	m.level = levelProject
+	m.project = project
+	m.discovered = nil
+	m.discoverErr = nil
+	m.discovering = false
+	m.detailPath = ""
+	m.rebuild()
+	m.table.SetCursor(0)
+	m.syncDetail()
+	return *m, m.startDiscovery()
+}
+
+func (m *Model) backToProjects() {
+	project := m.project
+	m.level = levelProjects
+	m.project = ""
+	m.discovered = nil
+	m.discoverErr = nil
+	m.discovering = false
+	m.detailPath = ""
+	m.rebuild()
+	m.selectProject(project)
+	m.syncDetail()
+}
+
+func (m *Model) startDiscovery() tea.Cmd {
+	if m.discover == nil || m.level != levelProject || m.discovering {
+		return nil
+	}
+	m.discovering = true
+	project := m.project
+	discover := m.discover
+	return func() tea.Msg {
+		result, err := discover.Discover(context.Background(), string(project))
+		return discoverMsg{project: project, result: result, err: err}
+	}
 }
 
 func (m *Model) selectedEntry() (application.OverviewWorktree, bool) {
@@ -328,7 +499,12 @@ func (m Model) View() tea.View {
 	}
 	width := m.contentWidth()
 	body := padHeight(lipgloss.NewStyle().Width(width).Render(m.table.View()), m.table.Height()+2)
-	if len(m.entries) == 0 {
+	if m.level == levelProjects && len(m.projects) == 0 {
+		body = padHeight(lipgloss.NewStyle().Width(width).Render(
+			mutedStyle.Render("  no projects\n  run portucca ensure in a worktree"),
+		), m.table.Height()+2)
+	}
+	if m.level == levelProject && len(m.entries) == 0 {
 		body = padHeight(lipgloss.NewStyle().Width(width).Render(
 			mutedStyle.Render("  no claims or main reservations\n  run portucca ensure in a worktree"),
 		), m.table.Height()+2)
@@ -446,7 +622,11 @@ func (m *Model) resize() {
 	}
 	m.table.SetWidth(width)
 	m.table.SetHeight(tableHeight)
-	m.table.SetColumns(columns(width))
+	if m.level == levelProjects {
+		m.table.SetColumns(projectColumns())
+	} else {
+		m.table.SetColumns(columns(width))
+	}
 	m.detail.SetWidth(width)
 	m.detail.SetHeight(detailHeight)
 	m.rebuild()
@@ -454,17 +634,44 @@ func (m *Model) resize() {
 }
 
 func (m *Model) rebuild() {
-	entries := make([]application.OverviewWorktree, len(m.overview.Worktrees))
-	copy(entries, m.overview.Worktrees)
+	if m.level == levelProjects {
+		m.projects = groupProjects(m.overview.Worktrees)
+		m.entries = nil
+		m.table.SetRows([]table.Row{})
+		m.table.SetColumns(projectColumns())
+		rows := make([]table.Row, 0, len(m.projects))
+		for _, summary := range m.projects {
+			rows = append(rows, table.Row{
+				string(summary.Project),
+				strconv.Itoa(summary.Worktrees),
+				strconv.Itoa(summary.Mains),
+				projectStatusText(summary),
+				projectPortsText(summary),
+			})
+		}
+		m.table.SetRows(rows)
+		if len(rows) == 0 || m.table.Cursor() < 0 || m.table.Cursor() >= len(rows) {
+			m.table.SetCursor(0)
+		}
+		return
+	}
+	entries := make([]application.OverviewWorktree, 0, len(m.overview.Worktrees)+len(m.discovered))
+	for _, w := range m.overview.Worktrees {
+		if w.Project == m.project {
+			entries = append(entries, w)
+		}
+	}
+	entries = append(entries, m.discovered...)
 	m.entries = entries
+	m.table.SetRows([]table.Row{})
+	m.table.SetColumns(columns(m.contentWidth()))
 	pathWidth := 13
-	if cols := m.table.Columns(); len(cols) > 2 {
-		pathWidth = cols[2].Width
+	if cols := m.table.Columns(); len(cols) > 1 {
+		pathWidth = cols[1].Width
 	}
 	rows := make([]table.Row, 0, len(entries))
 	for _, w := range entries {
 		rows = append(rows, table.Row{
-			string(w.Project),
 			w.Kind,
 			pathText(w.Path, pathWidth),
 			servicesText(w.Services),
@@ -472,7 +679,7 @@ func (m *Model) rebuild() {
 		})
 	}
 	m.table.SetRows(rows)
-	if len(rows) == 0 {
+	if len(rows) == 0 || m.table.Cursor() < 0 || m.table.Cursor() >= len(rows) {
 		m.table.SetCursor(0)
 	}
 }
@@ -503,6 +710,10 @@ func (m *Model) selectPath(path string) bool {
 }
 
 func (m *Model) syncDetail() {
+	if m.level == levelProjects {
+		m.syncProjectDetail()
+		return
+	}
 	if len(m.entries) == 0 {
 		m.detail.SetContent("")
 		return
@@ -566,17 +777,59 @@ func (m *Model) syncDetail() {
 	m.detail.SetContent(strings.Join(lines, "\n"))
 }
 
+func (m *Model) syncProjectDetail() {
+	if len(m.projects) == 0 {
+		m.detail.SetContent("")
+		return
+	}
+	idx := m.table.Cursor()
+	if idx < 0 || idx >= len(m.projects) {
+		idx = 0
+	}
+	summary := m.projects[idx]
+	width := m.contentWidth()
+	title := "project details"
+	titleStyle := mutedStyle
+	if m.focusDetail {
+		title = "▸ project details"
+		titleStyle = accentStyle.Bold(true)
+	}
+	lines := []string{
+		titleStyle.Render(title) + mutedStyle.Render(" · "+string(summary.Project)),
+		mutedStyle.Render(strings.Repeat("─", max(1, width))),
+		kv("project", string(summary.Project)),
+		kv("worktrees", strconv.Itoa(summary.Worktrees)),
+		kv("mains", strconv.Itoa(summary.Mains)),
+		kv("ports", projectPortsText(summary)),
+		kv("errors", strconv.Itoa(summary.Errors)),
+		kv("warnings", strconv.Itoa(summary.Warnings)),
+		"",
+		mutedStyle.Render("enter open · j/k move · q quit"),
+	}
+	m.detail.SetContent(strings.Join(lines, "\n"))
+}
+
+func projectColumns() []table.Column {
+	const projectW, worktreesW, mainsW, statusW, portsW = 16, 11, 7, 10, 12
+	return []table.Column{
+		{Title: "PROJECT", Width: projectW},
+		{Title: "WORKTREES", Width: worktreesW},
+		{Title: "MAINS", Width: mainsW},
+		{Title: "STATUS", Width: statusW},
+		{Title: "PORTS", Width: portsW},
+	}
+}
+
 func columns(width int) []table.Column {
-	const projectW, kindW, servicesW, statusW = 12, 9, 22, 10
-	pathW := width - projectW - kindW - servicesW - statusW - 10
+	const kindW, servicesW, statusW = 9, 22, 10
+	pathW := width - kindW - servicesW - statusW - 10
 	if pathW < 13 {
 		pathW = 13
 	}
-	if pathW > 60 {
-		pathW = 60
+	if pathW > 80 {
+		pathW = 80
 	}
 	return []table.Column{
-		{Title: "PROJECT", Width: projectW},
 		{Title: "KIND", Width: kindW},
 		{Title: "PATH", Width: pathW},
 		{Title: "SERVICES", Width: servicesW},
@@ -708,28 +961,49 @@ func (m Model) contentWidth() int {
 }
 
 func (m Model) renderHeader(width int) string {
-	projects := map[string]bool{}
+	projectCount := 0
 	worktrees, mains, issues := 0, 0, 0
-	for _, w := range m.entries {
-		projects[string(w.Project)] = true
-		issues += len(w.Issues)
-		switch w.Kind {
-		case "main":
-			mains++
-		case "worktree":
-			worktrees++
+	if m.level == levelProjects {
+		projectCount = len(m.projects)
+		for _, w := range m.overview.Worktrees {
+			issues += len(w.Issues)
+			switch w.Kind {
+			case "main":
+				mains++
+			case "worktree":
+				worktrees++
+			}
+		}
+	} else {
+		projectCount = 1
+		for _, w := range m.entries {
+			issues += len(w.Issues)
+			switch w.Kind {
+			case "main":
+				mains++
+			case "worktree":
+				worktrees++
+			}
 		}
 	}
 	counts := fmt.Sprintf("%s · %s · %s · %s",
-		countLabel(len(projects), "project", "projects"),
+		countLabel(projectCount, "project", "projects"),
 		countLabel(worktrees, "worktree", "worktrees"),
 		countLabel(mains, "main", "mains"),
 		countLabel(issues, "issue", "issues"),
 	)
-	left := accentStyle.Bold(true).Render("portucca tui") + "  " + mutedStyle.Render(counts)
+	title := "portucca tui"
+	if m.level == levelProject {
+		title += " / " + string(m.project)
+	}
+	left := accentStyle.Bold(true).Render(title) + "  " + mutedStyle.Render(counts)
 	line1 := joinSides(left, mutedStyle.Render("refreshed "+m.lastRefresh.Format("15:04:05")), width)
 	status := greenStyle.Render("● live")
 	switch {
+	case m.discovering:
+		status = yellowStyle.Render("● discovering…")
+	case m.discoverErr != nil:
+		status = redStyle.Render("✖ " + m.discoverErr.Error())
 	case m.running != "":
 		status = yellowStyle.Render("● " + m.running + "…")
 	case m.noticeErr != nil:
@@ -772,8 +1046,13 @@ func (m Model) footerText(width int) string {
 		key.Render("↑↓ jk") + desc.Render(" move"),
 		key.Render("tab") + desc.Render(" details"),
 	}
-	if m.actions != nil && len(m.entries) > 0 {
-		parts = append(parts, key.Render("a")+desc.Render(" actions"))
+	if m.level == levelProjects {
+		parts = append(parts, key.Render("enter")+desc.Render(" open"))
+	} else {
+		parts = append(parts, key.Render("h/esc")+desc.Render(" back"))
+		if m.actions != nil && len(m.entries) > 0 {
+			parts = append(parts, key.Render("a")+desc.Render(" actions"))
+		}
 	}
 	parts = append(parts,
 		key.Render("r")+desc.Render(" refresh"),
@@ -794,8 +1073,8 @@ func boolText(v bool) string {
 }
 
 // Run starts the Bubble Tea program. It returns when the user quits.
-func Run(in io.Reader, out io.Writer, overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner) error {
-	p := tea.NewProgram(New(overview, registryPath, focusPath, refresh, actions), tea.WithInput(in), tea.WithOutput(out))
+func Run(in io.Reader, out io.Writer, overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer) error {
+	p := tea.NewProgram(New(overview, registryPath, focusPath, refresh, actions, discover), tea.WithInput(in), tea.WithOutput(out))
 	_, err := p.Run()
 	return err
 }

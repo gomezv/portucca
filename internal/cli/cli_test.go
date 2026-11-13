@@ -727,7 +727,7 @@ func TestTUIHelp(t *testing.T) {
 		t.Fatalf("exit = %d, err=%s", code, errb.String())
 	}
 	text := out.String()
-	for _, want := range []string{"refresh", "tab", "j/k", "ctrl+c", "actions", "ensure", "prune", "confirm"} {
+	for _, want := range []string{"refresh", "tab", "j/k", "ctrl+c", "actions", "ensure", "prune", "confirm", "projects", "Discovery", "enter"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help missing %q:\n%s", want, text)
 		}
@@ -769,5 +769,37 @@ func TestPruneWorktreeRemovesCurrentMainWithoutConfig(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "removed: 0 mains: 1") {
 		t.Fatalf("output = %q, want the main removal count", out.String())
+	}
+}
+
+func TestNewTUIDiscoverer(t *testing.T) {
+	runner := newTUIDiscoverer(&application.App{})
+	if _, ok := runner.(tuiDiscoverer); !ok {
+		t.Fatalf("discoverer = %T", runner)
+	}
+}
+
+func TestWatchUsage(t *testing.T) {
+	for _, args := range [][]string{
+		{"watch", "--json"},
+		{"watch", "--interval", "0s", "--once"},
+		{"watch", "--retry", "0s", "--once"},
+	} {
+		var out, errb bytes.Buffer
+		if code := Run(args, &out, &errb); code != 2 {
+			t.Fatalf("%v exit = %d, want 2: %s", args, code, errb.String())
+		}
+	}
+}
+
+func TestWatchHelp(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := Run([]string{"help", "watch"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d: %s", code, errb.String())
+	}
+	for _, want := range []string{"discover", "setup", "--once", "--retry", "watch_failed"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("help missing %q:\n%s", want, out.String())
+		}
 	}
 }

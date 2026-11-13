@@ -44,6 +44,10 @@ type ScanRunner interface {
 	Scan(ctx context.Context, opts scan.Options) (scan.Detected, error)
 }
 
+type WorktreeLister interface {
+	ListWorktrees(root string) ([]project.Worktree, error)
+}
+
 type App struct {
 	Locator     Locator
 	Config      ConfigLoader
@@ -53,9 +57,17 @@ type App struct {
 	EnvStore    EnvStore
 	Executor    Executor
 	Scanner     ScanRunner
+	Worktrees   WorktreeLister
 	ConfigFile  string
 	Now         func() time.Time
 	LockTimeout time.Duration
+}
+
+func (a *App) lister() WorktreeLister {
+	if a.Worktrees != nil {
+		return a.Worktrees
+	}
+	return project.Lister{}
 }
 
 func (a *App) now() time.Time {

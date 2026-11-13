@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `portucca tui` can now run lifecycle actions on the selected row: `ensure`, `setup`,
+  `reallocate`, `release`, and `prune`, with confirmation for state-changing operations.
+
 ### Changed
 
 - `portucca prune` now also removes the current checkout's main reservation when its config

@@ -270,7 +270,7 @@ func execute(cmd string, args []string) (any, bool, error) {
 		if err != nil {
 			return nil, g.json, err
 		}
-		if err := tui.Run(os.Stdin, os.Stdout, overview, regPath, g.worktree, app.Overview); err != nil {
+		if err := tui.Run(os.Stdin, os.Stdout, overview, regPath, g.worktree, app.Overview, newTUIActions(app)); err != nil {
 			return nil, g.json, apperr.New("internal", err.Error(), "retry in an interactive terminal")
 		}
 		return nil, g.json, nil

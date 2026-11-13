@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -81,6 +82,27 @@ type discoverMsg struct {
 	err     error
 }
 
+type wrapPreviewMsg struct {
+	path   string
+	change application.DevScriptChange
+	err    error
+}
+
+type wrapAppliedMsg struct {
+	change application.DevScriptChange
+	err    error
+}
+
+type runPreparedMsg struct {
+	path string
+	plan application.RunPlan
+	err  error
+}
+
+type runDoneMsg struct {
+	err error
+}
+
 // Model is the dashboard state.
 type Model struct {
 	overview    application.OverviewResult
@@ -88,6 +110,8 @@ type Model struct {
 	refresh     RefreshFunc
 	actions     ActionRunner
 	discover    Discoverer
+	wrapper     DevWrapper
+	runner      RunPreparer
 	table       table.Model
 	detail      viewport.Model
 	entries     []application.OverviewWorktree
@@ -108,17 +132,25 @@ type Model struct {
 	confirm     *confirmState
 	running     string
 	runningPath string
+	runActive   bool
+	runInput    string
+	runPath     string
+	lastRun     string
+	wrapChange  *application.DevScriptChange
+	wrapPath    string
 	notice      string
 	noticeErr   error
 }
 
-func New(overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer) Model {
+func New(overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer, wrapper DevWrapper, runner RunPreparer) Model {
 	m := Model{
 		overview:    overview,
 		registry:    registryPath,
 		refresh:     refresh,
 		actions:     actions,
 		discover:    discover,
+		wrapper:     wrapper,
+		runner:      runner,
 		level:       levelProjects,
 		lastRefresh: time.Now(),
 		table: table.New(
@@ -181,6 +213,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startAction(pending.action, pending.path)
 			case "n", "esc":
 				m.confirm = nil
+			}
+			return m, nil
+		}
+		if m.runActive {
+			switch msg.String() {
+			case "esc":
+				m.runActive = false
+			case "enter":
+				return m.startRunPrepare()
+			case "backspace":
+				if m.runInput != "" {
+					r := []rune(m.runInput)
+					m.runInput = string(r[:len(r)-1])
+				}
+			default:
+				if msg.Text != "" {
+					m.runInput += msg.Text
+				}
+			}
+			return m, nil
+		}
+		if m.wrapChange != nil {
+			switch msg.String() {
+			case "y", "enter":
+				if m.wrapChange.Changed {
+					return m.applyWrap()
+				}
+				m.wrapChange = nil
+			case "n", "esc":
+				m.wrapChange = nil
 			}
 			return m, nil
 		}
@@ -302,6 +364,53 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.runningPath = ""
 		m.notice = msg.summary
 		m.noticeErr = msg.err
+		return m, m.startRefresh()
+	case wrapPreviewMsg:
+		m.running = ""
+		m.runningPath = ""
+		if msg.err != nil {
+			m.notice = ""
+			m.noticeErr = msg.err
+			return m, nil
+		}
+		if !msg.change.Changed {
+			m.notice = "wrap: dev script already uses portucca"
+			m.noticeErr = nil
+			return m, nil
+		}
+		m.wrapChange = &msg.change
+		m.wrapPath = msg.path
+		return m, nil
+	case wrapAppliedMsg:
+		m.running = ""
+		m.runningPath = ""
+		if msg.err != nil {
+			m.notice = ""
+			m.noticeErr = msg.err
+			return m, nil
+		}
+		m.notice = "wrap: dev script updated"
+		m.noticeErr = nil
+		return m, nil
+	case runPreparedMsg:
+		m.running = ""
+		m.runningPath = ""
+		if msg.err != nil {
+			m.notice = ""
+			m.noticeErr = msg.err
+			return m, m.startRefresh()
+		}
+		return m, tea.ExecProcess(runCommand(msg.plan, msg.path), func(err error) tea.Msg {
+			return runDoneMsg{err: err}
+		})
+	case runDoneMsg:
+		if msg.err != nil {
+			m.notice = ""
+			m.noticeErr = msg.err
+		} else {
+			m.notice = "run: finished"
+			m.noticeErr = nil
+		}
 		return m, m.startRefresh()
 	case discoverMsg:
 		m.discovering = false
@@ -431,6 +540,17 @@ func (m *Model) openMenu() {
 		return
 	}
 	items := actionsFor(w)
+	filtered := items[:0]
+	for _, action := range items {
+		if action == ActionRun && m.runner == nil {
+			continue
+		}
+		if action == ActionWrap && m.wrapper == nil {
+			continue
+		}
+		filtered = append(filtered, action)
+	}
+	items = filtered
 	if len(items) == 0 {
 		return
 	}
@@ -455,11 +575,71 @@ func (m *Model) chooseAction() (Model, tea.Cmd) {
 	action := m.menu.items[m.menu.cursor]
 	path := m.menu.path
 	m.menu = nil
+	switch action {
+	case ActionRun:
+		m.runActive = true
+		m.runInput = m.lastRun
+		m.runPath = path
+		return *m, nil
+	case ActionWrap:
+		return *m, m.startWrapPreview(path)
+	}
 	if actionNeedsConfirm(action) {
 		m.confirm = &confirmState{action: action, path: path}
 		return *m, nil
 	}
 	return m.startAction(action, path)
+}
+
+func (m *Model) startWrapPreview(path string) tea.Cmd {
+	if path == "" || m.wrapper == nil {
+		return nil
+	}
+	m.running = "wrap dev"
+	m.runningPath = path
+	wrapper := m.wrapper
+	return func() tea.Msg {
+		change, err := wrapper.Preview(context.Background(), path)
+		return wrapPreviewMsg{path: path, change: change, err: err}
+	}
+}
+
+func (m *Model) applyWrap() (Model, tea.Cmd) {
+	path := m.wrapPath
+	if path == "" || m.wrapper == nil || m.wrapChange == nil {
+		return *m, nil
+	}
+	m.wrapChange = nil
+	m.wrapPath = ""
+	m.running = "wrap dev"
+	m.runningPath = path
+	wrapper := m.wrapper
+	return *m, func() tea.Msg {
+		change, err := wrapper.Apply(context.Background(), path)
+		return wrapAppliedMsg{change: change, err: err}
+	}
+}
+
+func (m *Model) startRunPrepare() (Model, tea.Cmd) {
+	input := strings.TrimSpace(m.runInput)
+	path := m.runPath
+	if input == "" || path == "" || m.runner == nil {
+		return *m, nil
+	}
+	m.runActive = false
+	m.runPath = ""
+	m.lastRun = input
+	m.running = "run"
+	m.runningPath = path
+	runner := m.runner
+	return *m, func() tea.Msg {
+		plan, err := runner.Prepare(context.Background(), path, []string{"sh", "-c", input})
+		return runPreparedMsg{path: path, plan: plan, err: err}
+	}
+}
+
+func runCommand(plan application.RunPlan, dir string) *exec.Cmd {
+	return &exec.Cmd{Path: plan.Path, Args: plan.Args, Env: plan.Env, Dir: dir}
 }
 
 func (m *Model) startAction(action Action, path string) (Model, tea.Cmd) {
@@ -490,6 +670,12 @@ func (m Model) View() tea.View {
 	}
 	if m.running != "" {
 		return m.modalView(m.runningView())
+	}
+	if m.runActive {
+		return m.modalView(m.runView())
+	}
+	if m.wrapChange != nil {
+		return m.modalView(m.wrapView())
 	}
 	if m.confirm != nil {
 		return m.modalView(m.confirmView())
@@ -568,6 +754,31 @@ func (m Model) confirmView() string {
 	return strings.Join(lines, "\n")
 }
 
+func (m Model) runView() string {
+	lines := []string{
+		accentStyle.Bold(true).Render("run command"),
+		mutedStyle.Render(m.runPath),
+		"",
+		"> " + m.runInput + "_",
+		"",
+		mutedStyle.Render("enter run · esc cancel"),
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) wrapView() string {
+	lines := []string{
+		accentStyle.Bold(true).Render("wrap dev script"),
+		mutedStyle.Render(m.wrapChange.Path),
+		"",
+		redStyle.Render("- " + m.wrapChange.Before),
+		greenStyle.Render("+ " + m.wrapChange.After),
+		"",
+		mutedStyle.Render("y apply · n cancel"),
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (m Model) runningView() string {
 	return strings.Join([]string{
 		accentStyle.Bold(true).Render("running " + m.running),
@@ -588,7 +799,7 @@ func actionErrText(err error) string {
 }
 
 func (m *Model) startRefresh() tea.Cmd {
-	if m.refreshing || m.running != "" || m.refresh == nil {
+	if m.refreshing || m.running != "" || m.runActive || m.wrapChange != nil || m.refresh == nil {
 		return nil
 	}
 	m.refreshing = true
@@ -1073,8 +1284,8 @@ func boolText(v bool) string {
 }
 
 // Run starts the Bubble Tea program. It returns when the user quits.
-func Run(in io.Reader, out io.Writer, overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer) error {
-	p := tea.NewProgram(New(overview, registryPath, focusPath, refresh, actions, discover), tea.WithInput(in), tea.WithOutput(out))
+func Run(in io.Reader, out io.Writer, overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer, wrapper DevWrapper, runner RunPreparer) error {
+	p := tea.NewProgram(New(overview, registryPath, focusPath, refresh, actions, discover, wrapper, runner), tea.WithInput(in), tea.WithOutput(out))
 	_, err := p.Run()
 	return err
 }

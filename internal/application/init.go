@@ -27,14 +27,16 @@ type InitRequest struct {
 	Scan            bool
 	Compose         bool
 	ExcludeServices []string
+	WrapScript      bool
 }
 
 type InitResult struct {
-	ConfigPath string                                `json:"configPath"`
-	Project    domain.Project                        `json:"project"`
-	Services   map[domain.ServiceName]domain.Service `json:"services"`
-	Warning    string                                `json:"warning,omitempty"`
-	Scan       *InitScan                             `json:"scan,omitempty"`
+	ConfigPath    string                                `json:"configPath"`
+	Project       domain.Project                        `json:"project"`
+	Services      map[domain.ServiceName]domain.Service `json:"services"`
+	Warning       string                                `json:"warning,omitempty"`
+	Scan          *InitScan                             `json:"scan,omitempty"`
+	PackageScript *DevScriptChange                      `json:"packageScript"`
 }
 
 type ScanSource struct {
@@ -196,6 +198,17 @@ func (a *App) initScan(ctx context.Context, c project.Context, req InitRequest) 
 		}
 		return InitResult{}, scanIncomplete(cfg, merged)
 	}
+	var packageScript *DevScriptChange
+	preview, previewErr := a.previewDevWrapAt(c.Root)
+	if req.WrapScript {
+		if previewErr != nil {
+			return InitResult{}, previewErr
+		}
+		packageScript = &preview
+	} else if previewErr == nil {
+		preview.Changed = false
+		packageScript = &preview
+	}
 	warning := a.claimsWarning(cfg.Project, c.Root)
 	if err := config.WriteFile(path, cfg); err != nil {
 		return InitResult{}, apperr.New("config_invalid", err.Error(), "check permissions")
@@ -203,9 +216,17 @@ func (a *App) initScan(ctx context.Context, c project.Context, req InitRequest) 
 	if err := a.registerMain(c, cfg, path); err != nil {
 		return InitResult{}, err
 	}
+	if req.WrapScript && packageScript != nil && packageScript.Changed {
+		applied, err := a.applyDevWrapAt(c.Root)
+		if err != nil {
+			return InitResult{}, err
+		}
+		packageScript = &applied
+	}
 	return InitResult{
 		ConfigPath: path, Project: cfg.Project, Services: cfg.Services, Warning: warning,
-		Scan: &InitScan{Sources: merged.Sources, Warnings: merged.Warnings},
+		Scan:          &InitScan{Sources: merged.Sources, Warnings: merged.Warnings},
+		PackageScript: packageScript,
 	}, nil
 }
 

@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-13
+
 ### Added
 
+- `portucca init --scan` can wrap `scripts.dev` as `portucca run -- <original>` after
+  confirmation (`--wrap-script`/`--no-wrap`), so plain `npm run dev` uses the assigned port.
+- `portucca tui` can run a prompted command in the selected row and wrap its dev script with
+  confirmation.
 - `portucca tui` now navigates by project and discovers worktrees that exist in git but have
   no claim, offering `setup` for them.
 - `portucca watch` discovers worktrees without claims under registered mains and runs
@@ -116,7 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `install.sh` with OS/architecture detection and SHA-256 checksum verification.
 - Release artifacts for Linux and macOS on `amd64` and `arm64`.
 
-[Unreleased]: https://github.com/gomezv/portucca/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/gomezv/portucca/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/gomezv/portucca/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/gomezv/portucca/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/gomezv/portucca/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/gomezv/portucca/compare/v0.2.0...v0.3.0

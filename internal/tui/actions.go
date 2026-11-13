@@ -15,10 +15,21 @@ const (
 	ActionReallocate Action = "reallocate"
 	ActionRelease    Action = "release"
 	ActionPrune      Action = "prune"
+	ActionRun        Action = "run"
+	ActionWrap       Action = "wrap dev"
 )
 
 type ActionRunner interface {
 	Run(ctx context.Context, action Action, worktree string) (string, error)
+}
+
+type DevWrapper interface {
+	Preview(ctx context.Context, worktree string) (application.DevScriptChange, error)
+	Apply(ctx context.Context, worktree string) (application.DevScriptChange, error)
+}
+
+type RunPreparer interface {
+	Prepare(ctx context.Context, worktree string, command []string) (application.RunPlan, error)
 }
 
 type RefreshFunc func(context.Context) (application.OverviewResult, error)
@@ -35,9 +46,9 @@ func actionsFor(w application.OverviewWorktree) []Action {
 	}
 	switch w.Kind {
 	case "main":
-		return []Action{ActionEnsure, ActionSetup, ActionPrune}
+		return []Action{ActionEnsure, ActionSetup, ActionPrune, ActionRun, ActionWrap}
 	case "worktree":
-		return []Action{ActionEnsure, ActionSetup, ActionReallocate, ActionRelease, ActionPrune}
+		return []Action{ActionEnsure, ActionSetup, ActionReallocate, ActionRelease, ActionPrune, ActionRun, ActionWrap}
 	default:
 		return []Action{ActionPrune}
 	}
@@ -53,7 +64,7 @@ func hasConfigIssue(w application.OverviewWorktree) bool {
 }
 
 func actionNeedsConfirm(action Action) bool {
-	return action != ActionEnsure
+	return action != ActionEnsure && action != ActionRun && action != ActionWrap
 }
 
 func actionLabel(action Action) string {
@@ -72,6 +83,10 @@ func actionDescription(action Action) string {
 		return "release the whole claim"
 	case ActionPrune:
 		return "remove stale claims and main reservations"
+	case ActionRun:
+		return "run a command with the row environment"
+	case ActionWrap:
+		return "wrap scripts.dev with portucca run"
 	default:
 		return ""
 	}

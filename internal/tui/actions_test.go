@@ -14,10 +14,10 @@ func TestActionsFor(t *testing.T) {
 	missing := application.OverviewWorktree{Kind: "worktree", Live: true, Issues: []application.Issue{{Code: "config_missing"}}}
 	invalid := application.OverviewWorktree{Kind: "main", Live: true, Issues: []application.Issue{{Code: "config_invalid"}}}
 
-	if got, want := actionsFor(main), []Action{ActionEnsure, ActionSetup, ActionPrune}; !slices.Equal(got, want) {
+	if got, want := actionsFor(main), []Action{ActionEnsure, ActionSetup, ActionPrune, ActionRun, ActionWrap}; !slices.Equal(got, want) {
 		t.Fatalf("main actions = %v, want %v", got, want)
 	}
-	if got, want := actionsFor(wt), []Action{ActionEnsure, ActionSetup, ActionReallocate, ActionRelease, ActionPrune}; !slices.Equal(got, want) {
+	if got, want := actionsFor(wt), []Action{ActionEnsure, ActionSetup, ActionReallocate, ActionRelease, ActionPrune, ActionRun, ActionWrap}; !slices.Equal(got, want) {
 		t.Fatalf("worktree actions = %v, want %v", got, want)
 	}
 	if got, want := actionsFor(dead), []Action{ActionPrune}; !slices.Equal(got, want) {
@@ -37,7 +37,9 @@ func TestActionConfirm(t *testing.T) {
 			t.Fatalf("%s needs confirmation", action)
 		}
 	}
-	if actionNeedsConfirm(ActionEnsure) {
-		t.Fatal("ensure must not ask for confirmation")
+	for _, action := range []Action{ActionEnsure, ActionRun, ActionWrap} {
+		if actionNeedsConfirm(action) {
+			t.Fatalf("%s must not ask for confirmation", action)
+		}
 	}
 }

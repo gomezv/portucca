@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `portucca tui` can now run lifecycle actions on the selected row: `ensure`, `setup`,
+- `portucca tui` now navigates by project and discovers worktrees that exist in git but have
+  no claim, offering `setup` for them.
+- `portucca watch` discovers worktrees without claims under registered mains and runs
+  `setup` on them; `--once`, `--interval`, and `--retry` control the loop. It also prunes
+  claims for worktrees whose directories no longer exist.
+- `portucca tui` can run lifecycle actions on the selected row: `ensure`, `setup`,
   `reallocate`, `release`, and `prune`, with confirmation for state-changing operations.
 
 ### Changed

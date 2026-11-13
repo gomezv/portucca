@@ -24,7 +24,13 @@ type ActionRunner interface {
 type RefreshFunc func(context.Context) (application.OverviewResult, error)
 
 func actionsFor(w application.OverviewWorktree) []Action {
-	if !w.Live || hasConfigIssue(w) {
+	if !w.Live {
+		return []Action{ActionPrune}
+	}
+	if w.Kind == "unregistered" {
+		return []Action{ActionSetup}
+	}
+	if hasConfigIssue(w) {
 		return []Action{ActionPrune}
 	}
 	switch w.Kind {

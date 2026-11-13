@@ -34,6 +34,7 @@ Commands:
   env         Print resolved ports and env values
   list        List claims
   run         Start the project with the resolved environment
+  watch       Prepare worktrees created outside portucca
   version     Print build metadata
   help        Show help for a command
 
@@ -188,35 +189,67 @@ Notes:
   - It fails with service_not_claimed when --service is not in the claim.
   - Another worktree can take the released port.
 `,
-	"tui": `portucca tui — interactive dashboard
+	"tui": `portucca tui — interactive project dashboard
 
 Usage:
   portucca tui [flags]
 
 What it does:
-  - shows projects, worktrees, claims, main reservations, ports, bands and issues
+  - lists projects; enter opens a project and esc goes back
+  - shows mains, registered worktrees, and git worktrees without claims
   - refreshes every 5 seconds or with r
   - runs lifecycle actions on the selected row
 
 Keys:
   up/down or j/k  move
+  enter or l      open the selected project
+  esc or h        back to the project list
   tab             switch table/detail
-  a               actions for the selected row
+  a               actions for the selected row (inside a project)
   r               refresh
   q, ctrl+c       quit
 
 Actions:
   - ensure, setup, reallocate, release and prune
+  - discovered worktrees offer setup only until they have a claim
   - the menu only offers actions that apply to the row
   - setup, reallocate, release and prune ask for confirmation
   - release frees the whole claim; prune uses the selected row as --worktree
   - init and run are not available from the TUI
 
+Discovery:
+  - only the open project is scanned with git worktree list
+  - discovered worktrees are read-only until you run setup
+
 Notes:
   - It requires an interactive terminal.
   - --json is not supported.
-  - --worktree only selects the initial row.
+  - --worktree opens the project for that path and selects the row.
   - --config does not apply to the snapshot or actions.
+`,
+	"watch": `portucca watch — prepare discovered worktrees
+
+Usage:
+  portucca watch [--interval <dur>] [--once] [--retry <dur>]
+
+What it does:
+  - discovers worktrees without claims under the registered main checkouts
+  - runs setup on each one (ports, env, claim)
+  - never creates or deletes worktrees, starts dev servers, or supervises processes
+
+Flags:
+  --interval <dur>  time between scans (default 5s, minimum 1s)
+  --once            run a single cycle and exit
+  --retry <dur>     retry failed worktrees after this delay (default 1m, minimum 1s)
+
+Exit codes:
+  - continuous mode: 0 on Ctrl+C, 1 on a fatal registry/discovery error
+  - --once: 0 if every setup succeeded, 1 with watch_failed otherwise
+
+Notes:
+  - Uses the global --registry and --lock-timeout.
+  - --config and --json do not apply.
+  - --worktree does not apply.
 `,
 	"prune": `portucca prune — remove claims and main reservations for deleted paths
 

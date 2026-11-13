@@ -291,7 +291,8 @@ examples, and notes for each command.
 | `doctor` | Read-only diagnostics. Exits `1` when `data.ok` is false. |
 | `env` | Prints the resolved ports and env values for the current worktree. |
 | `list` | Lists claims. Defaults to the current project; use `--all` or `--project <name>`. |
-| `tui` | Opens an interactive dashboard of all projects, worktrees, claims, main reservations, ports, bands, and issues, with lifecycle actions on the selected row. |
+| `tui` | Opens an interactive dashboard grouped by project, with worktree discovery and lifecycle actions on the selected row. |
+| `watch` | Discovers worktrees without claims under registered mains and runs `setup` on them. |
 | `version` | Prints version, commit, OS, architecture, and schema version. |
 
 Global flags: `--json`, `--config <path>`, `--registry <path>`, `--worktree <path>`,
@@ -316,23 +317,45 @@ portucca version --json
 
 ## TUI
 
-`portucca tui` opens a dashboard of every project in the registry: worktrees, main
-reservations, claims, ports, configured bands, and lightweight issues. The snapshot is
-read-only and takes a shared lock.
+`portucca tui` opens a dashboard grouped by project. The project list shows worktree/main
+counts, port ranges, and issues. Entering a project shows its main checkout, registered
+worktrees, and worktrees discovered with `git worktree list` that have no claim yet. Discovery
+is read-only and only runs for the project you opened.
 
-Keys: `up`/`down` or `j`/`k` move, `tab` switches between the table and the detail pane, `a`
-opens the lifecycle actions for the selected row, `r` refreshes, and `q` or `ctrl+c` quits. It
-also refreshes every 5 seconds.
+Keys: `up`/`down` or `j`/`k` move, `enter`/`l` opens a project, `esc`/`h` goes back, `tab`
+switches between the table and the detail pane, `a` opens lifecycle actions for the selected
+row, `r` refreshes, and `q` or `ctrl+c` quits. It also refreshes every 5 seconds.
 
 Actions are `ensure`, `setup`, `reallocate`, `release`, and `prune`; they run the same
 application commands as the CLI under an exclusive lock. The menu only offers actions that
-apply to the row (for example, a live main checkout cannot be released), and `setup`,
-`reallocate`, `release`, and `prune` ask for confirmation. `release` frees the whole claim.
-`prune` uses the selected row as its worktree. `init` and `run` are not available from the TUI.
+apply to the row (a discovered worktree offers `setup`; a live main checkout cannot be
+released), and `setup`, `reallocate`, `release`, and `prune` ask for confirmation. `release`
+frees the whole claim. `prune` uses the selected row as its worktree. `init` and `run` are not
+available from the TUI.
 
-It requires an interactive terminal and does not support `--json`. `--worktree` only selects
-the initial row; `--config` does not apply to the snapshot or the actions (each row resolves
-its own config).
+It requires an interactive terminal and does not support `--json`. `--worktree` opens the
+project for that path and selects the row; `--config` does not apply to the snapshot or the
+actions (each row resolves its own config).
+
+## Watch
+
+`portucca watch` discovers worktrees without claims under the registered main checkouts and
+runs `setup` on them. It does not create or delete worktrees, delete directories, start dev
+servers, or supervise processes.
+
+```bash
+portucca watch                  # every 5 seconds
+portucca watch --interval 10s
+portucca watch --once           # one cycle; exit 1 if any setup failed
+portucca watch --retry 1m       # retry failed worktrees after 1 minute
+```
+
+It uses the CLI registry and lock timeout; `--config` and `--json` do not apply. Orca (or
+another worktree creator) remains the primary trigger; `watch` is the safety net.
+
+Each cycle also removes claims for worktrees whose directory no longer exists and logs
+`pruned stale claim (path missing)`. Main reservations are left to the explicit `prune`
+command.
 
 ## Configuration
 

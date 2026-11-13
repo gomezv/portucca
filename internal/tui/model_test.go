@@ -37,23 +37,46 @@ func overviewFixture() application.OverviewResult {
 	}
 }
 
-func sizedModel(t *testing.T, ov application.OverviewResult) Model {
+func projectsModel(t *testing.T, ov application.OverviewResult) Model {
 	t.Helper()
-	m := New(ov, "/tmp/ports.json", "", nil, nil)
+	m := New(ov, "/tmp/ports.json", "", nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return next.(Model)
 }
 
+func sizedModel(t *testing.T, ov application.OverviewResult) Model {
+	t.Helper()
+	m := projectsModel(t, ov)
+	if len(m.projects) > 0 {
+		next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+		m = next.(Model)
+	}
+	return m
+}
+
 func TestModelViewShowsRows(t *testing.T) {
-	m := sizedModel(t, overviewFixture())
+	m := projectsModel(t, overviewFixture())
 	view := m.View()
 	if !view.AltScreen {
 		t.Fatal("AltScreen = false")
 	}
-	for _, want := range []string{"app", "main", "worktree", "/tmp/wt", "5174", "ok"} {
+	for _, want := range []string{"app", "1 project", "WORKTREES", "MAINS", "5173-5174", "ok"} {
 		if !strings.Contains(view.Content, want) {
 			t.Fatalf("view missing %q:\n%s", want, view.Content)
 		}
+	}
+}
+
+func TestModelViewProjectRows(t *testing.T) {
+	m := sizedModel(t, overviewFixture())
+	view := m.View().Content
+	for _, want := range []string{"KIND", "PATH", "SERVICES", "STATUS", "/tmp/wt", "worktree", "5174", "ok"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("project view missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "PROJECT") {
+		t.Fatalf("level-2 header still has PROJECT:\n%s", view)
 	}
 }
 
@@ -195,10 +218,14 @@ func TestModelSelectionFallback(t *testing.T) {
 }
 
 func TestModelEightyColumns(t *testing.T) {
-	m := New(overviewFixture(), "/home/user/.local/state/portucca/ports.json", "", nil, nil)
+	m := New(overviewFixture(), "/home/user/.local/state/portucca/ports.json", "", nil, nil, nil)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
 	m.refreshing = true
 	m.err = errors.New("boom with a very long message that should be truncated")
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	next, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	view := next.(Model).View().Content
 	if !strings.Contains(view, "STATUS") || !strings.Contains(view, "web=5174") {
 		t.Fatalf("view at 80x24:\n%s", view)
@@ -253,27 +280,30 @@ func TestModelResizeRebuildsPaths(t *testing.T) {
 		Services: []application.OverviewService{{Name: "web", Port: 5174, MainPort: 5173, StartPort: 5174, InBand: true}},
 		Issues:   []application.Issue{},
 	}}}
-	m := New(ov, "", "", nil, nil)
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	rows := next.(Model).table.Rows()
+	m := New(ov, "", "", nil, nil, nil)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	rows := m.table.Rows()
 	if len(rows) != 1 {
 		t.Fatalf("rows = %+v", rows)
 	}
-	cell := rows[0][2]
-	if !strings.Contains(cell, "alpha") || lipgloss.Width(cell) > 13 {
-		t.Fatalf("path cell = %q, want the leaf within 13 columns", cell)
+	cell := rows[0][1]
+	if !strings.Contains(cell, "/home/user/projects/very/long/alpha") {
+		t.Fatalf("path cell = %q, want the full path in the PATH column", cell)
 	}
 }
 
 func TestModelMinimumSize(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 79, Height: 24}, {Width: 80, Height: 15}} {
-		m := New(overviewFixture(), "", "", nil, nil)
+		m := New(overviewFixture(), "", "", nil, nil, nil)
 		next, _ := m.Update(size)
 		if !strings.Contains(next.(Model).View().Content, "too small") {
 			t.Fatalf("%dx%d did not report too small", size.Width, size.Height)
 		}
 	}
-	m := New(overviewFixture(), "", "", nil, nil)
+	m := New(overviewFixture(), "", "", nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
 	view := next.(Model).View().Content
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
@@ -288,14 +318,14 @@ func TestModelMinimumSize(t *testing.T) {
 }
 
 func TestModelEmpty(t *testing.T) {
-	m := sizedModel(t, application.OverviewResult{RegistryVersion: 2, Worktrees: []application.OverviewWorktree{}})
-	if !strings.Contains(m.View().Content, "no claims") {
+	m := projectsModel(t, application.OverviewResult{RegistryVersion: 2, Worktrees: []application.OverviewWorktree{}})
+	if !strings.Contains(m.View().Content, "no projects") {
 		t.Fatalf("view = %s", m.View().Content)
 	}
 }
 
 func TestModelTooSmall(t *testing.T) {
-	m := New(overviewFixture(), "/tmp/ports.json", "", nil, nil)
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, nil, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 20, Height: 5})
 	if !strings.Contains(next.(Model).View().Content, "too small") {
 		t.Fatalf("view = %s", next.(Model).View().Content)
@@ -320,8 +350,10 @@ func (f *fakeActions) Run(_ context.Context, action Action, worktree string) (st
 
 func actionModel(t *testing.T, actions ActionRunner, row int) Model {
 	t.Helper()
-	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions)
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(Model)
 	m.table.SetCursor(row)
 	m.syncDetail()
@@ -431,8 +463,10 @@ func TestModelActionPrune(t *testing.T) {
 	ov := overviewFixture()
 	ov.Worktrees[0].Issues = []application.Issue{{Code: "config_missing", Message: "portucca.json is missing"}}
 	actions := &fakeActions{summary: "prune: removed=1 mains=1"}
-	m := New(ov, "/tmp/ports.json", "", nil, actions)
+	m := New(ov, "/tmp/ports.json", "", nil, actions, nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(Model)
 	m.table.SetCursor(0)
 	next, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
@@ -549,5 +583,168 @@ func TestModelActionNoticeDoesNotMaskRefreshError(t *testing.T) {
 	}
 	if strings.Contains(view, "ensure: changed=true") {
 		t.Fatalf("view still shows the stale success notice:\n%s", view)
+	}
+}
+
+type fakeDiscoverer struct {
+	calls  []string
+	result application.DiscoveryResult
+	err    error
+}
+
+func (f *fakeDiscoverer) Discover(_ context.Context, project string) (application.DiscoveryResult, error) {
+	f.calls = append(f.calls, project)
+	return f.result, f.err
+}
+
+func TestModelProjects(t *testing.T) {
+	m := projectsModel(t, projectsFixture())
+	if m.level != levelProjects {
+		t.Fatalf("level = %v, want projects", m.level)
+	}
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if m.level != levelProject || m.project != "app" {
+		t.Fatalf("level = %v project = %q", m.level, m.project)
+	}
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = next.(Model)
+	if m.level != levelProjects {
+		t.Fatalf("level = %v, want projects after esc", m.level)
+	}
+}
+
+func TestModelFocusPath(t *testing.T) {
+	m := New(projectsFixture(), "/tmp/ports.json", "/tmp/wt", nil, nil, nil)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	if m.level != levelProject || m.project != "app" || m.selectedPath() != "/tmp/wt" {
+		t.Fatalf("level = %v project = %q path = %q", m.level, m.project, m.selectedPath())
+	}
+}
+
+func TestModelDiscoveryScope(t *testing.T) {
+	discover := &fakeDiscoverer{result: application.DiscoveryResult{Worktrees: []application.DiscoveredWorktree{{
+		Project: "app", Path: "/tmp/new", Branch: "feature", MainRoot: "/tmp/main",
+	}}}}
+	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	if len(discover.calls) != 0 {
+		t.Fatalf("discovery ran at level 1: %v", discover.calls)
+	}
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("open project did not start discovery")
+	}
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if len(discover.calls) != 1 || discover.calls[0] != "app" {
+		t.Fatalf("calls = %v", discover.calls)
+	}
+	found := false
+	for _, entry := range m.entries {
+		if entry.Kind == "unregistered" && entry.Path == "/tmp/new" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("entries = %+v, want the discovered row", m.entries)
+	}
+}
+
+func TestModelUnregisteredOnlySetup(t *testing.T) {
+	actions := &fakeActions{}
+	discover := &fakeDiscoverer{result: application.DiscoveryResult{Worktrees: []application.DiscoveredWorktree{{
+		Project: "app", Path: "/tmp/new", Branch: "feature", MainRoot: "/tmp/main",
+	}}}}
+	m := New(projectsFixture(), "/tmp/ports.json", "", nil, actions, discover)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	for i, entry := range m.entries {
+		if entry.Kind == "unregistered" {
+			m.table.SetCursor(i)
+		}
+	}
+	next, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m = next.(Model)
+	if len(m.menu.items) != 1 || m.menu.items[0] != ActionSetup {
+		t.Fatalf("menu = %v, want setup only", m.menu.items)
+	}
+}
+
+func TestModelDiscoveryError(t *testing.T) {
+	discover := &fakeDiscoverer{err: errors.New("git boom")}
+	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if m.discoverErr == nil || !strings.Contains(m.View().Content, "git boom") {
+		t.Fatalf("discoverErr = %v", m.discoverErr)
+	}
+}
+
+func TestModelUnregisteredSetup(t *testing.T) {
+	actions := &fakeActions{summary: "setup: services=1"}
+	discover := &fakeDiscoverer{result: application.DiscoveryResult{Worktrees: []application.DiscoveredWorktree{{
+		Project: "app", Path: "/tmp/new", Branch: "feature", MainRoot: "/tmp/main",
+	}}}}
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, discover)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(Model)
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	for i, entry := range m.entries {
+		if entry.Kind == "unregistered" {
+			m.table.SetCursor(i)
+		}
+	}
+	next, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m = next.(Model)
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	next, cmd = m.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m = next.(Model)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+
+	refreshed := overviewFixture()
+	refreshed.Worktrees = append(refreshed.Worktrees, application.OverviewWorktree{
+		Project: "app", Path: "/tmp/new", Kind: "worktree", Live: true,
+		Services: []application.OverviewService{{Name: "web", Port: 5175, MainPort: 5173, StartPort: 5174, InBand: true}},
+		Issues:   []application.Issue{},
+	})
+	next, _ = m.Update(refreshMsg{overview: refreshed})
+	m = next.(Model)
+	next, _ = m.Update(discoverMsg{project: "app"})
+	m = next.(Model)
+	found := false
+	for _, entry := range m.entries {
+		if entry.Path == "/tmp/new" && entry.Kind == "worktree" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("entries = %+v, want the unregistered row converted to worktree", m.entries)
+	}
+}
+
+func TestModelProjectsSelection(t *testing.T) {
+	m := sizedModel(t, projectsFixture())
+	next := projectsFixture()
+	next.Worktrees = next.Worktrees[2:]
+	updated, _ := m.Update(refreshMsg{overview: next})
+	if updated.(Model).level != levelProjects {
+		t.Fatalf("level = %v, want projects after the project disappeared", updated.(Model).level)
 	}
 }

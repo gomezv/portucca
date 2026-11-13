@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"runtime"
 	"time"
 
@@ -45,6 +47,7 @@ var knownCommands = map[string]bool{
 	"env":        true,
 	"list":       true,
 	"run":        true,
+	"watch":      true,
 	"version":    true,
 	"help":       true,
 }
@@ -106,7 +109,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 1
 	}
-	if cmd == "tui" && data == nil && err == nil {
+	if (cmd == "tui" || cmd == "watch") && data == nil && err == nil {
 		return 0
 	}
 	if jsonMode {
@@ -142,6 +145,8 @@ func execute(cmd string, args []string) (any, bool, error) {
 	var services stringList
 	var runService string
 	var releaseService string
+	var watchInterval, watchRetry time.Duration
+	var watchOnce bool
 	switch cmd {
 	case "list":
 		fs.BoolVar(&all, "all", false, "")
@@ -158,6 +163,10 @@ func execute(cmd string, args []string) (any, bool, error) {
 		fs.BoolVar(&initCompose, "compose", false, "")
 		fs.Var(&excludeServices, "exclude-service", "")
 		fs.Var(&services, "service", "")
+	case "watch":
+		fs.DurationVar(&watchInterval, "interval", 5*time.Second, "")
+		fs.DurationVar(&watchRetry, "retry", time.Minute, "")
+		fs.BoolVar(&watchOnce, "once", false, "")
 	case "version":
 		var versionFlag bool
 		fs.BoolVar(&versionFlag, "version", false, "")
@@ -170,6 +179,12 @@ func execute(cmd string, args []string) (any, bool, error) {
 		}
 		return nil, g.json, apperr.New("usage", err.Error(), "check the flags")
 	}
+	worktreeSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "worktree" {
+			worktreeSet = true
+		}
+	})
 	if cmd == "run" && !hasRunSeparator(args, fs.Args()) {
 		return nil, false, apperr.New("usage", "run: missing -- before the command", "use -- <command> [args...]")
 	}
@@ -270,7 +285,11 @@ func execute(cmd string, args []string) (any, bool, error) {
 		if err != nil {
 			return nil, g.json, err
 		}
-		if err := tui.Run(os.Stdin, os.Stdout, overview, regPath, g.worktree, app.Overview, newTUIActions(app)); err != nil {
+		focus := ""
+		if worktreeSet {
+			focus = g.worktree
+		}
+		if err := tui.Run(os.Stdin, os.Stdout, overview, regPath, focus, app.Overview, newTUIActions(app), newTUIDiscoverer(app)); err != nil {
 			return nil, g.json, apperr.New("internal", err.Error(), "retry in an interactive terminal")
 		}
 		return nil, g.json, nil
@@ -300,6 +319,31 @@ func execute(cmd string, args []string) (any, bool, error) {
 			Command:  fs.Args(),
 		})
 		return nil, g.json, err
+	case "watch":
+		if g.json {
+			return nil, g.json, apperr.New("usage", "watch does not support --json", "run portucca watch without --json")
+		}
+		if watchInterval < time.Second {
+			return nil, false, apperr.New("usage", "watch: --interval must be at least 1s", "use --interval 5s")
+		}
+		if watchRetry < time.Second {
+			return nil, false, apperr.New("usage", "watch: --retry must be at least 1s", "use --retry 1m")
+		}
+		watchApp := *app
+		watchApp.ConfigFile = ""
+		watchCtx, stop := signal.NotifyContext(ctx, os.Interrupt)
+		defer stop()
+		result, err := watchApp.Watch(watchCtx, application.WatchRequest{
+			Interval: watchInterval, Retry: watchRetry, Once: watchOnce, Out: os.Stdout,
+		})
+		if err != nil {
+			return nil, false, err
+		}
+		if watchOnce && result.Failed > 0 {
+			return nil, false, apperr.New("watch_failed",
+				fmt.Sprintf("%d setup(s) failed", result.Failed), "check the log and run portucca setup manually")
+		}
+		return nil, false, nil
 	}
 	return nil, g.json, apperr.New("usage", "unknown command: "+cmd, "")
 }

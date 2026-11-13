@@ -92,11 +92,16 @@ func upsertClaim(reg domain.Registry, claim domain.Claim) domain.Registry {
 	return reg
 }
 
+func isStalePath(stat func(string) (fs.FileInfo, error), path string) bool {
+	_, err := stat(path)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
 func pruneStale(reg domain.Registry, stat func(string) (fs.FileInfo, error)) (domain.Registry, []domain.Claim, []domain.MainReservation) {
 	kept := make([]domain.Claim, 0, len(reg.Worktrees))
 	var removed []domain.Claim
 	for _, claim := range reg.Worktrees {
-		if _, err := stat(claim.Path); errors.Is(err, fs.ErrNotExist) {
+		if isStalePath(stat, claim.Path) {
 			removed = append(removed, claim)
 			continue
 		}
@@ -106,7 +111,7 @@ func pruneStale(reg domain.Registry, stat func(string) (fs.FileInfo, error)) (do
 	keptMains := make([]domain.MainReservation, 0, len(reg.Mains))
 	var removedMains []domain.MainReservation
 	for _, main := range reg.Mains {
-		if _, err := stat(main.Path); errors.Is(err, fs.ErrNotExist) {
+		if isStalePath(stat, main.Path) {
 			removedMains = append(removedMains, main)
 			continue
 		}

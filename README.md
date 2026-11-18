@@ -329,7 +329,8 @@ is read-only and only runs for the project you opened.
 
 Keys: `up`/`down` or `j`/`k` move, `enter`/`l` opens a project, `esc`/`h` goes back, `tab`
 switches between the table and the detail pane, `a` opens lifecycle actions for the selected
-row, `r` refreshes, and `q` or `ctrl+c` quits. It also refreshes every 5 seconds.
+row, `i` initializes a project from the project list, `r` refreshes, and `q` or `ctrl+c`
+quits. It also refreshes every 5 seconds.
 
 Actions are `ensure`, `setup`, `reallocate`, `release`, `prune`, `run`, and `wrap dev`; they run the same
 application commands as the CLI under an exclusive lock. The menu only offers actions that
@@ -337,8 +338,16 @@ apply to the row (a discovered worktree offers `setup`; a live main checkout can
 released), and `setup`, `reallocate`, `release`, and `prune` ask for confirmation. `release`
 frees the whole claim. `prune` uses the selected row as its worktree. `run` prompts for a command, executes it in
 the row directory with the resolved environment, and suspends the TUI until it exits. `wrap
-dev` previews the `package.json` change and applies it only after confirmation. `init` is not
-available from the TUI.
+dev` previews the `package.json` change and applies it only after confirmation.
+
+Press `i` on the project list to initialize a project. It asks for a repository path (the
+`--worktree` path or the current directory by default), accepts only a main checkout, runs
+the same scan as `init --scan`, and shows a preview of the project, services, ports, env
+targets, bootstrap, and warnings. Missing `mainPort` values can be filled inline; other gaps
+are shown with the CLI flags that resolve them. Nothing is written until you confirm. If
+`portucca.json` already exists, the preview warns and the overwrite needs explicit
+confirmation. After writing the config and the main reservation, the TUI offers the
+`wrap dev` preview when `scripts.dev` can be wrapped.
 
 It requires an interactive terminal and does not support `--json`. `--worktree` opens the
 project for that path and selects the row; `--config` does not apply to the snapshot or the

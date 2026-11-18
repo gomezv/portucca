@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `portucca tui` can initialize a project with `i`: it scans a main checkout, fills missing
+  `mainPort`s inline, previews the config, and offers the dev-script wrap after writing.
+
 ## [0.6.0] - 2026-11-13
 
 ### Added

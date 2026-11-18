@@ -39,7 +39,7 @@ func overviewFixture() application.OverviewResult {
 
 func projectsModel(t *testing.T, ov application.OverviewResult) Model {
 	t.Helper()
-	m := New(ov, "/tmp/ports.json", "", nil, nil, nil, nil, nil)
+	m := New(ov, "/tmp/ports.json", "", nil, nil, nil, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return next.(Model)
 }
@@ -218,7 +218,7 @@ func TestModelSelectionFallback(t *testing.T) {
 }
 
 func TestModelEightyColumns(t *testing.T) {
-	m := New(overviewFixture(), "/home/user/.local/state/portucca/ports.json", "", nil, nil, nil, nil, nil)
+	m := New(overviewFixture(), "/home/user/.local/state/portucca/ports.json", "", nil, nil, nil, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -280,7 +280,7 @@ func TestModelResizeRebuildsPaths(t *testing.T) {
 		Services: []application.OverviewService{{Name: "web", Port: 5174, MainPort: 5173, StartPort: 5174, InBand: true}},
 		Issues:   []application.Issue{},
 	}}}
-	m := New(ov, "", "", nil, nil, nil, nil, nil)
+	m := New(ov, "", "", nil, nil, nil, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -297,13 +297,13 @@ func TestModelResizeRebuildsPaths(t *testing.T) {
 
 func TestModelMinimumSize(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 79, Height: 24}, {Width: 80, Height: 15}} {
-		m := New(overviewFixture(), "", "", nil, nil, nil, nil, nil)
+		m := New(overviewFixture(), "", "", nil, nil, nil, nil, nil, InitOptions{})
 		next, _ := m.Update(size)
 		if !strings.Contains(next.(Model).View().Content, "too small") {
 			t.Fatalf("%dx%d did not report too small", size.Width, size.Height)
 		}
 	}
-	m := New(overviewFixture(), "", "", nil, nil, nil, nil, nil)
+	m := New(overviewFixture(), "", "", nil, nil, nil, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
 	view := next.(Model).View().Content
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
@@ -325,7 +325,7 @@ func TestModelEmpty(t *testing.T) {
 }
 
 func TestModelTooSmall(t *testing.T) {
-	m := New(overviewFixture(), "/tmp/ports.json", "", nil, nil, nil, nil, nil)
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, nil, nil, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 20, Height: 5})
 	if !strings.Contains(next.(Model).View().Content, "too small") {
 		t.Fatalf("view = %s", next.(Model).View().Content)
@@ -377,7 +377,7 @@ func (f *fakeRunner) Prepare(_ context.Context, _ string, command []string) (app
 
 func fullActionModel(t *testing.T, actions ActionRunner, wrapper DevWrapper, runner RunPreparer, row int) Model {
 	t.Helper()
-	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, nil, wrapper, runner)
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, nil, wrapper, runner, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -389,7 +389,7 @@ func fullActionModel(t *testing.T, actions ActionRunner, wrapper DevWrapper, run
 
 func actionModel(t *testing.T, actions ActionRunner, row int) Model {
 	t.Helper()
-	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, nil, nil, nil)
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, nil, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -502,7 +502,7 @@ func TestModelActionPrune(t *testing.T) {
 	ov := overviewFixture()
 	ov.Worktrees[0].Issues = []application.Issue{{Code: "config_missing", Message: "portucca.json is missing"}}
 	actions := &fakeActions{summary: "prune: removed=1 mains=1"}
-	m := New(ov, "/tmp/ports.json", "", nil, actions, nil, nil, nil)
+	m := New(ov, "/tmp/ports.json", "", nil, actions, nil, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -654,7 +654,7 @@ func TestModelProjects(t *testing.T) {
 }
 
 func TestModelFocusPath(t *testing.T) {
-	m := New(projectsFixture(), "/tmp/ports.json", "/tmp/wt", nil, nil, nil, nil, nil)
+	m := New(projectsFixture(), "/tmp/ports.json", "/tmp/wt", nil, nil, nil, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	if m.level != levelProject || m.project != "app" || m.selectedPath() != "/tmp/wt" {
@@ -666,7 +666,7 @@ func TestModelDiscoveryScope(t *testing.T) {
 	discover := &fakeDiscoverer{result: application.DiscoveryResult{Worktrees: []application.DiscoveredWorktree{{
 		Project: "app", Path: "/tmp/new", Branch: "feature", MainRoot: "/tmp/main",
 	}}}}
-	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover, nil, nil)
+	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	if len(discover.calls) != 0 {
@@ -698,7 +698,7 @@ func TestModelUnregisteredOnlySetup(t *testing.T) {
 	discover := &fakeDiscoverer{result: application.DiscoveryResult{Worktrees: []application.DiscoveredWorktree{{
 		Project: "app", Path: "/tmp/new", Branch: "feature", MainRoot: "/tmp/main",
 	}}}}
-	m := New(projectsFixture(), "/tmp/ports.json", "", nil, actions, discover, nil, nil)
+	m := New(projectsFixture(), "/tmp/ports.json", "", nil, actions, discover, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -719,7 +719,7 @@ func TestModelUnregisteredOnlySetup(t *testing.T) {
 
 func TestModelDiscoveryError(t *testing.T) {
 	discover := &fakeDiscoverer{err: errors.New("git boom")}
-	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover, nil, nil)
+	m := New(projectsFixture(), "/tmp/ports.json", "", nil, nil, discover, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -736,7 +736,7 @@ func TestModelUnregisteredSetup(t *testing.T) {
 	discover := &fakeDiscoverer{result: application.DiscoveryResult{Worktrees: []application.DiscoveredWorktree{{
 		Project: "app", Path: "/tmp/new", Branch: "feature", MainRoot: "/tmp/main",
 	}}}}
-	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, discover, nil, nil)
+	m := New(overviewFixture(), "/tmp/ports.json", "", nil, actions, discover, nil, nil, InitOptions{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})

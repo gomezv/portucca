@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -69,10 +68,30 @@ func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
 	if err != nil {
 		return InitResult{}, mapProjectErr(err)
 	}
-	if req.Scan {
-		return a.initScan(ctx, c, req)
+	if !req.Scan {
+		return a.initFromFlags(c, req)
 	}
-	return a.initFromFlags(c, req)
+	if _, err := parseExplicitServices(req.Services); err != nil {
+		return InitResult{}, err
+	}
+	if req.Project != "" && !domain.ValidProject(req.Project) {
+		return InitResult{}, apperr.New("usage", "invalid project "+req.Project, "use a lowercase slug")
+	}
+	path, err := initConfigPath(c, req)
+	if err != nil {
+		return InitResult{}, err
+	}
+	if _, statErr := os.Stat(path); statErr == nil && !req.Force {
+		return InitResult{}, apperr.New("config_exists", "portucca.json already exists", "use --force to overwrite it")
+	}
+	proposal, merged, err := a.analyzeInit(ctx, c, req)
+	if err != nil {
+		return InitResult{}, err
+	}
+	if len(merged.Gaps) > 0 {
+		return InitResult{}, scanIncomplete(proposal.Config, merged)
+	}
+	return a.ApplyInit(ctx, proposal, ApplyInitOptions{Force: req.Force, WrapScript: req.WrapScript})
 }
 
 func (a *App) initFromFlags(c project.Context, req InitRequest) (InitResult, error) {
@@ -143,91 +162,6 @@ func (a *App) claimsWarning(projectName domain.Project, root string) string {
 		}
 	}
 	return ""
-}
-
-func (a *App) initScan(ctx context.Context, c project.Context, req InitRequest) (InitResult, error) {
-	explicit, err := parseExplicitServices(req.Services)
-	if err != nil {
-		return InitResult{}, err
-	}
-	if req.Project != "" && !domain.ValidProject(req.Project) {
-		return InitResult{}, apperr.New("usage", "invalid project "+req.Project, "use a lowercase slug")
-	}
-	path, err := initConfigPath(c, req)
-	if err != nil {
-		return InitResult{}, err
-	}
-	if _, err := os.Stat(path); err == nil && !req.Force {
-		return InitResult{}, apperr.New("config_exists", "portucca.json already exists", "use --force to overwrite it")
-	}
-	if a.Scanner == nil {
-		return InitResult{}, apperr.New("internal", "scan is not configured", "rebuild the binary")
-	}
-	detected, err := a.Scanner.Scan(ctx, scan.Options{
-		Root: c.Root, MainRoot: c.MainRoot,
-		DiscoverCompose: req.Compose, ExcludeServices: req.ExcludeServices,
-	})
-	if err != nil {
-		var tooLarge *scan.TooLargeError
-		if errors.As(err, &tooLarge) {
-			ae := apperr.New("scan_too_large", "scan exceeded the entry limit", "use --service flags to configure the project manually")
-			ae.Details = map[string]any{"limit": tooLarge.Limit, "visited": tooLarge.Visited}
-			return InitResult{}, ae
-		}
-		return InitResult{}, apperr.New("internal", err.Error(), "retry or use --service flags")
-	}
-	merged := mergeDetected(req, detected, explicit)
-	cfg := merged.Config
-	if len(merged.Gaps) > 0 {
-		return InitResult{}, scanIncomplete(cfg, merged)
-	}
-	if err := cfg.Validate(); err != nil {
-		if len(req.Services) > 0 {
-			return InitResult{}, apperr.New("usage", err.Error(), "check --project and --service")
-		}
-		if len(cfg.Services) == 0 {
-			merged.Gaps = append(merged.Gaps, scan.Gap{
-				Field: "services", Reason: "missing", Message: err.Error(),
-				Flags: []string{"--service <name>:<main>:<start>"},
-			})
-		} else {
-			merged.Gaps = append(merged.Gaps, scan.Gap{
-				Field: "config", Reason: "invalid", Message: err.Error(),
-				Flags: []string{"--project <slug>", "--service <name>:<main>:<start>"},
-			})
-		}
-		return InitResult{}, scanIncomplete(cfg, merged)
-	}
-	var packageScript *DevScriptChange
-	preview, previewErr := a.previewDevWrapAt(c.Root)
-	if req.WrapScript {
-		if previewErr != nil {
-			return InitResult{}, previewErr
-		}
-		packageScript = &preview
-	} else if previewErr == nil {
-		preview.Changed = false
-		packageScript = &preview
-	}
-	warning := a.claimsWarning(cfg.Project, c.Root)
-	if err := config.WriteFile(path, cfg); err != nil {
-		return InitResult{}, apperr.New("config_invalid", err.Error(), "check permissions")
-	}
-	if err := a.registerMain(c, cfg, path); err != nil {
-		return InitResult{}, err
-	}
-	if req.WrapScript && packageScript != nil && packageScript.Changed {
-		applied, err := a.applyDevWrapAt(c.Root)
-		if err != nil {
-			return InitResult{}, err
-		}
-		packageScript = &applied
-	}
-	return InitResult{
-		ConfigPath: path, Project: cfg.Project, Services: cfg.Services, Warning: warning,
-		Scan:          &InitScan{Sources: merged.Sources, Warnings: merged.Warnings},
-		PackageScript: packageScript,
-	}, nil
 }
 
 func parseExplicitServices(specs []string) (map[domain.ServiceName]domain.Service, error) {

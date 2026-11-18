@@ -298,7 +298,9 @@ func execute(cmd string, args []string) (any, bool, error) {
 		if worktreeSet {
 			focus = g.worktree
 		}
-		if err := tui.Run(os.Stdin, os.Stdout, overview, regPath, focus, app.Overview, newTUIActions(app), newTUIDiscoverer(app), newTUIWrapper(app), newTUIRunner(app)); err != nil {
+		if err := tui.Run(os.Stdin, os.Stdout, overview, regPath, focus, app.Overview,
+			newTUIActions(app), newTUIDiscoverer(app), newTUIWrapper(app), newTUIRunner(app),
+			tuiInitOptions(app, g.worktree, worktreeSet)); err != nil {
 			return nil, g.json, apperr.New("internal", err.Error(), "retry in an interactive terminal")
 		}
 		return nil, g.json, nil

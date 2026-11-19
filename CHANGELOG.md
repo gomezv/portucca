@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-19
+
 ### Added
 
 - `portucca tui` can initialize a project with `i`: it scans a main checkout, fills missing
@@ -14,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `init --scan` maps root `.env*` port keys to services by `<SERVICE>_PORT`, then by the
   final `mainPort` value; the TUI init flow auto-binds unique matches and offers a selector
   for ambiguous ones, adding the root env file to `bootstrap.copyFromMain`.
+
+### Fixed
+
+- The TUI and `doctor` now flag a claim whose path exists but is no longer a git worktree
+  (`stale_worktree`/`stale_claim`) and point to `portucca release`; they no longer show
+  `● ok` for an orphaned path.
 
 ## [0.6.0] - 2026-11-13
 
@@ -130,7 +138,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `install.sh` with OS/architecture detection and SHA-256 checksum verification.
 - Release artifacts for Linux and macOS on `amd64` and `arm64`.
 
-[Unreleased]: https://github.com/gomezv/portucca/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/gomezv/portucca/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/gomezv/portucca/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/gomezv/portucca/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/gomezv/portucca/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/gomezv/portucca/compare/v0.3.0...v0.4.0

@@ -92,7 +92,7 @@ the old claim once the old path no longer exists.
 
 > [!NOTE]
 > Portucca is available from `v0.1.0`. The `install.sh` and module commands below use the
-> latest release; pin a version with `PORTUCCA_VERSION` or `@v0.6.0`.
+> latest release; pin a version with `PORTUCCA_VERSION` or `@v0.7.0`.
 
 ### From source (current development builds)
 
@@ -120,7 +120,7 @@ curl -fsSL https://raw.githubusercontent.com/gomezv/portucca/main/install.sh | b
 Pin a version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gomezv/portucca/main/install.sh | PORTUCCA_VERSION=v0.6.0 bash
+curl -fsSL https://raw.githubusercontent.com/gomezv/portucca/main/install.sh | PORTUCCA_VERSION=v0.7.0 bash
 ```
 
 The script needs `curl`, `tar`, `install`, and either `sha256sum` or `shasum`. It detects
@@ -166,7 +166,10 @@ Example env files such as `.env.example` are only a fallback for `mainPort` when
 determine every required value, it writes nothing and lists the gaps; add `--project` or
 `--service` to fill them. A missing port gap names the service and the files the scan
 inspected, and it reminds you that framework defaults (such as Next.js `3000`) are not
-assumed. `--scan` and `--preset` are mutually exclusive.
+assumed. Root `.env*` port keys in a multi-service repository are mapped to services by
+`<SERVICE>_PORT`, then by the final `mainPort` value; the key is added to `env` and its file
+to `bootstrap.copyFromMain`. Ambiguous root keys are reported as warnings. `--scan` and
+`--preset` are mutually exclusive.
 
 For Next.js projects, plain `npm run dev` ignores the `PORT` in `.env`. `init --scan` can wrap
 `scripts.dev` as `portucca run -- <original>` so the script uses the assigned port. Use
@@ -329,7 +332,8 @@ is read-only and only runs for the project you opened.
 
 Keys: `up`/`down` or `j`/`k` move, `enter`/`l` opens a project, `esc`/`h` goes back, `tab`
 switches between the table and the detail pane, `a` opens lifecycle actions for the selected
-row, `r` refreshes, and `q` or `ctrl+c` quits. It also refreshes every 5 seconds.
+row, `i` initializes a project from the project list, `r` refreshes, and `q` or `ctrl+c`
+quits. It also refreshes every 5 seconds.
 
 Actions are `ensure`, `setup`, `reallocate`, `release`, `prune`, `run`, and `wrap dev`; they run the same
 application commands as the CLI under an exclusive lock. The menu only offers actions that
@@ -337,8 +341,17 @@ apply to the row (a discovered worktree offers `setup`; a live main checkout can
 released), and `setup`, `reallocate`, `release`, and `prune` ask for confirmation. `release`
 frees the whole claim. `prune` uses the selected row as its worktree. `run` prompts for a command, executes it in
 the row directory with the resolved environment, and suspends the TUI until it exits. `wrap
-dev` previews the `package.json` change and applies it only after confirmation. `init` is not
-available from the TUI.
+dev` previews the `package.json` change and applies it only after confirmation.
+
+Press `i` on the project list to initialize a project. It asks for a repository path (the
+`--worktree` path or the current directory by default), accepts only a main checkout, runs
+the same scan as `init --scan`, and shows a preview of the project, services, ports, env
+targets, bootstrap, and warnings. Missing `mainPort` values can be filled inline; other gaps
+are shown with the CLI flags that resolve them. Unique root env candidates are bound
+automatically; ambiguous ones open a selector, and skipped keys become warnings. Nothing is
+written until you confirm. If `portucca.json` already exists, the preview warns and the
+overwrite needs explicit confirmation. After writing the config and the main reservation, the
+TUI offers the `wrap dev` preview when `scripts.dev` can be wrapped.
 
 It requires an interactive terminal and does not support `--json`. `--worktree` opens the
 project for that path and selects the row; `--config` does not apply to the snapshot or the

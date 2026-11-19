@@ -134,7 +134,7 @@ func TestScanIgnoresRootEnvInMonorepo(t *testing.T) {
 	if len(got.Services) != 1 || got.Services[0].Name != "api" {
 		t.Fatalf("services = %+v, want only api", got.Services)
 	}
-	if len(got.Warnings) == 0 || !strings.Contains(strings.Join(got.Warnings, " "), "ignoring root") {
+	if len(got.Warnings) == 0 || !strings.Contains(strings.Join(got.Warnings, " "), "kept as candidates") {
 		t.Fatalf("warnings = %+v, want the root warning", got.Warnings)
 	}
 }
@@ -348,7 +348,7 @@ func TestScanKeepsRootServiceInMonorepo(t *testing.T) {
 	if len(got.CopyFromMain) != 1 || copyPaths(got.CopyFromMain)[0] != "apps/api/.env" {
 		t.Fatalf("copyFromMain = %+v, want only apps/api/.env", got.CopyFromMain)
 	}
-	if !strings.Contains(strings.Join(got.Warnings, " "), "ignoring root .env") {
+	if !strings.Contains(strings.Join(got.Warnings, " "), "kept as candidates") {
 		t.Fatalf("warnings = %+v, want the root .env warning", got.Warnings)
 	}
 }
@@ -405,5 +405,80 @@ func TestScanRecordsCheckedSources(t *testing.T) {
 	}
 	if checked := strings.Join(got.Services[0].Checked, ","); checked != ".env,.env.example,compose.yaml,package.json" {
 		t.Fatalf("checked = %q, want the parsed env and package files", checked)
+	}
+}
+
+func TestScanKeepsRootEnvForMultiService(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "package.json", `{"name":"orchestrator","scripts":{"dev":"turbo run dev"}}`)
+	writeFile(t, root, ".env", "API_PORT=3414\nDATABASE_URL=postgresql://x\n")
+	writeFile(t, root, "apps/api/package.json", `{"name":"api","scripts":{"dev":"nest start"}}`)
+
+	got, err := Scan(context.Background(), Options{Root: root, MainRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.RootEnv) != 1 {
+		t.Fatalf("RootEnv = %+v, want API_PORT", got.RootEnv)
+	}
+	if got.RootEnv[0].Key != "API_PORT" || got.RootEnv[0].Value != 3414 || got.RootEnv[0].File != ".env" {
+		t.Fatalf("RootEnv = %+v", got.RootEnv)
+	}
+}
+
+func TestScanRootEnvNotExposedForSingleService(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "package.json", `{"name":"app","scripts":{"dev":"node server.js"}}`)
+	writeFile(t, root, ".env", "PORT=3000\n")
+
+	got, err := Scan(context.Background(), Options{Root: root, MainRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.RootEnv) != 0 {
+		t.Fatalf("RootEnv = %+v, want none", got.RootEnv)
+	}
+}
+
+func TestScanRootEnvSkipsExamples(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "package.json", `{"name":"orchestrator","scripts":{"dev":"turbo run dev"}}`)
+	writeFile(t, root, ".env.example", "API_PORT=3414\n")
+	writeFile(t, root, "apps/api/package.json", `{"name":"api","scripts":{"dev":"nest start"}}`)
+
+	got, err := Scan(context.Background(), Options{Root: root, MainRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.RootEnv) != 0 {
+		t.Fatalf("RootEnv = %+v, want examples skipped", got.RootEnv)
+	}
+}
+
+func TestScanRootEnvRank(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "package.json", `{"name":"orchestrator","scripts":{"dev":"turbo run dev"}}`)
+	writeFile(t, root, ".env", "API_PORT=3414\n")
+	writeFile(t, root, ".env.local", "API_PORT=3415\n")
+	writeFile(t, root, "apps/api/package.json", `{"name":"api","scripts":{"dev":"nest start"}}`)
+
+	got, err := Scan(context.Background(), Options{Root: root, MainRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.RootEnv) != 2 {
+		t.Fatalf("RootEnv = %+v, want .env and .env.local", got.RootEnv)
+	}
+	for _, sig := range got.RootEnv {
+		switch sig.File {
+		case ".env.local":
+			if sig.Rank != rankEnvLocal {
+				t.Fatalf(".env.local rank = %d", sig.Rank)
+			}
+		case ".env":
+			if sig.Rank != rankEnv {
+				t.Fatalf(".env rank = %d", sig.Rank)
+			}
+		}
 	}
 }

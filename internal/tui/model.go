@@ -140,9 +140,12 @@ type Model struct {
 	wrapPath    string
 	notice      string
 	noticeErr   error
+	initFlow    InitFlow
+	initDefault string
+	init        *initState
 }
 
-func New(overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer, wrapper DevWrapper, runner RunPreparer) Model {
+func New(overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer, wrapper DevWrapper, runner RunPreparer, init InitOptions) Model {
 	m := Model{
 		overview:    overview,
 		registry:    registryPath,
@@ -151,6 +154,8 @@ func New(overview application.OverviewResult, registryPath, focusPath string, re
 		discover:    discover,
 		wrapper:     wrapper,
 		runner:      runner,
+		initFlow:    init.Flow,
+		initDefault: init.DefaultPath,
 		level:       levelProjects,
 		lastRefresh: time.Now(),
 		table: table.New(
@@ -204,6 +209,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if m.running != "" {
 			return m, nil
+		}
+		if m.init != nil {
+			return m.updateInit(msg)
 		}
 		if m.confirm != nil {
 			switch msg.String() {
@@ -267,6 +275,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "enter", "l":
 				return m.openProject()
+			case "i":
+				return m.startInit()
 			}
 		} else {
 			switch msg.String() {
@@ -412,6 +422,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.noticeErr = nil
 		}
 		return m, m.startRefresh()
+	case initInspectedMsg:
+		if m.init == nil {
+			return m, nil
+		}
+		s := m.init
+		if msg.err != nil {
+			s.err = msg.err
+			s.stage = initPathStage
+			return m, nil
+		}
+		if !msg.info.IsMain {
+			s.err = fmt.Errorf("run init in the main checkout: %s", msg.info.MainRoot)
+			s.stage = initPathStage
+			return m, nil
+		}
+		s.path = msg.path
+		s.stage = initBusyStage
+		return m, m.analyzeInit(nil, nil)
+	case initAnalyzedMsg:
+		if m.init == nil {
+			return m, nil
+		}
+		m.handleInitAnalyzed(msg)
+		return m, nil
+	case initAppliedMsg:
+		m.init = nil
+		if msg.err != nil {
+			m.notice = ""
+			m.noticeErr = msg.err
+			return m, m.startRefresh()
+		}
+		m.notice = fmt.Sprintf("init: project %s services=%d", msg.result.Project, len(msg.result.Services))
+		m.noticeErr = nil
+		var cmds []tea.Cmd
+		if cmd := m.startRefresh(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if cmd := m.startInitWrapPreview(msg.proposal.Root); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		switch len(cmds) {
+		case 0:
+			return m, nil
+		case 1:
+			return m, cmds[0]
+		default:
+			return m, tea.Batch(cmds...)
+		}
+	case initWrapPreviewMsg:
+		m.running = ""
+		m.runningPath = ""
+		if msg.err == nil && msg.change.Changed {
+			m.wrapChange = &msg.change
+			m.wrapPath = msg.path
+		}
+		return m, nil
 	case discoverMsg:
 		m.discovering = false
 		if m.level != levelProject || msg.project != m.project {
@@ -671,6 +737,9 @@ func (m Model) View() tea.View {
 	if m.running != "" {
 		return m.modalView(m.runningView())
 	}
+	if m.init != nil {
+		return m.modalView(m.initView())
+	}
 	if m.runActive {
 		return m.modalView(m.runView())
 	}
@@ -800,6 +869,9 @@ func actionErrText(err error) string {
 
 func (m *Model) startRefresh() tea.Cmd {
 	if m.refreshing || m.running != "" || m.runActive || m.wrapChange != nil || m.refresh == nil {
+		return nil
+	}
+	if m.init != nil && m.init.stage == initBusyStage {
 		return nil
 	}
 	m.refreshing = true
@@ -1081,7 +1153,7 @@ func statusText(w application.OverviewWorktree) string {
 
 func isErrorIssue(code string) bool {
 	switch code {
-	case "stale_path", "config_invalid", "claim_out_of_band", "main_port_mismatch":
+	case "stale_path", "stale_worktree", "config_invalid", "claim_out_of_band", "main_port_mismatch":
 		return true
 	default:
 		return false
@@ -1259,6 +1331,9 @@ func (m Model) footerText(width int) string {
 	}
 	if m.level == levelProjects {
 		parts = append(parts, key.Render("enter")+desc.Render(" open"))
+		if m.initFlow != nil {
+			parts = append(parts, key.Render("i")+desc.Render(" init"))
+		}
 	} else {
 		parts = append(parts, key.Render("h/esc")+desc.Render(" back"))
 		if m.actions != nil && len(m.entries) > 0 {
@@ -1284,8 +1359,8 @@ func boolText(v bool) string {
 }
 
 // Run starts the Bubble Tea program. It returns when the user quits.
-func Run(in io.Reader, out io.Writer, overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer, wrapper DevWrapper, runner RunPreparer) error {
-	p := tea.NewProgram(New(overview, registryPath, focusPath, refresh, actions, discover, wrapper, runner), tea.WithInput(in), tea.WithOutput(out))
+func Run(in io.Reader, out io.Writer, overview application.OverviewResult, registryPath, focusPath string, refresh RefreshFunc, actions ActionRunner, discover Discoverer, wrapper DevWrapper, runner RunPreparer, init InitOptions) error {
+	p := tea.NewProgram(New(overview, registryPath, focusPath, refresh, actions, discover, wrapper, runner, init), tea.WithInput(in), tea.WithOutput(out))
 	_, err := p.Run()
 	return err
 }

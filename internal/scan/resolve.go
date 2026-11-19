@@ -12,15 +12,47 @@ import (
 	"github.com/gomezv/portucca/internal/domain"
 )
 
+func rootEnvSignals(c *candidate) []EnvSignal {
+	if c == nil {
+		return nil
+	}
+	byKey := map[string]EnvSignal{}
+	for _, p := range c.ports {
+		if p.file == "" || p.invalid || p.rank == rankEnvExample {
+			continue
+		}
+		key := p.file + "\x00" + p.key
+		if prev, ok := byKey[key]; ok && prev.Rank <= p.rank {
+			continue
+		}
+		byKey[key] = EnvSignal{Value: p.value, File: p.file, Key: p.key, Source: p.source, Rank: p.rank}
+	}
+	out := make([]EnvSignal, 0, len(byKey))
+	for _, sig := range byKey {
+		out = append(out, sig)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].File != out[j].File {
+			return out[i].File < out[j].File
+		}
+		return out[i].Key < out[j].Key
+	})
+	return out
+}
+
 func (s *scanner) result() Detected {
+	rootEnv := rootEnvSignals(s.byDir["."])
+	keepRootEnv := false
 	if len(s.byDir) > 1 || (s.opts.DiscoverCompose && len(s.compose) > 0) {
 		if c, ok := s.byDir["."]; ok {
 			pkg := s.packages["."]
 			switch {
 			case !pkg.hasRun:
+				keepRootEnv = true
 				delete(s.byDir, ".")
-				s.warn("ignoring root .env/package.json signals in a multi-service repository; use --service to declare a root service")
+				s.warn("root .env port keys are kept as candidates; the root is not treated as a service in a multi-service repository")
 			case !s.rootHasPortSignal(c, pkg):
+				keepRootEnv = true
 				delete(s.byDir, ".")
 				s.warn("ignoring root package.json scripts without a port in a multi-service repository; treating the root as an orchestrator (pass --service <name>:<main>:<start> to declare a root service)")
 			default:
@@ -35,7 +67,8 @@ func (s *scanner) result() Detected {
 				}
 				c.ports = ports
 				if ignoredEnv {
-					s.warn("ignoring root .env port signals in a multi-service repository; use --service to declare a root service")
+					keepRootEnv = true
+					s.warn("root .env port keys are kept as candidates; the root is not treated as a service in a multi-service repository")
 				}
 			}
 		}
@@ -153,8 +186,11 @@ func (s *scanner) result() Detected {
 	sortEnv(env)
 	sort.Strings(warnings)
 	sortGaps(gaps)
+	if !keepRootEnv {
+		rootEnv = nil
+	}
 	return Detected{
-		Project: detectProject(s.ctx, s.opts.Root), Services: services, Env: env,
+		Project: detectProject(s.ctx, s.opts.Root), Services: services, Env: env, RootEnv: rootEnv,
 		CopyFromMain: copyFiles, Warnings: warnings, Gaps: gaps,
 	}
 }

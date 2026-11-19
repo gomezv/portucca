@@ -262,7 +262,10 @@ func TestDeriveStartPortSkipsUsed(t *testing.T) {
 			},
 		},
 	}
-	merged := mergeDetected(InitRequest{}, det, nil)
+	merged, err := mergeDetected(InitRequest{}, det, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(merged.Gaps) != 0 {
 		t.Fatalf("gaps = %+v, want none", merged.Gaps)
 	}

@@ -209,6 +209,7 @@ Keys:
   esc or h        back to the project list
   tab             switch table/detail
   a               actions for the selected row (inside a project)
+  i init          init a project (level 1)
   r               refresh
   q, ctrl+c       quit
 
@@ -220,7 +221,12 @@ Actions:
   - release frees the whole claim; prune uses the selected row as --worktree
   - run prompts for a command and suspends the TUI until it exits
   - wrap dev shows the package.json diff and applies it after confirmation
-  - init is not available from the TUI
+
+Init:
+  - i asks for a repo path (defaults to --worktree or the current directory)
+  - only main checkouts; worktrees are rejected with the main path
+  - runs init --scan, fills missing mainPorts inline, previews, and asks before writing
+  - offers wrap dev after a successful init
 
 Discovery:
   - only the open project is scanned with git worktree list

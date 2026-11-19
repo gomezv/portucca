@@ -332,3 +332,18 @@ func TestOverviewClaimNotWorktree(t *testing.T) {
 		t.Fatalf("row = %+v", row)
 	}
 }
+
+func TestOverviewClaimGitMissing(t *testing.T) {
+	path := t.TempDir()
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{{Project: "app", Path: path, Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 5174}}}}}}
+	app, _ := overviewApp(t, reg, mapConfig{roots: map[string]domain.Config{path: overviewCfg()}}, &recordingLocker{})
+	app.Locator = fakeLocator{err: project.ErrGitMissing}
+	got, err := app.Overview(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := overviewRow(t, got, "worktree", path)
+	if !row.Live || hasIssueCode(row.Issues, "stale_worktree") || !hasIssueCode(row.Issues, "git_missing") {
+		t.Fatalf("row = %+v", row)
+	}
+}

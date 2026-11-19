@@ -163,20 +163,27 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 	for _, claim := range reg.Worktrees {
 		dc := DoctorClaim{Project: claim.Project, Path: claim.Path, Services: claim.Services, Issues: []Issue{}}
 		live := true
+		var claimCtx project.Context
+		var claimDetectErr error
 		if _, err := os.Stat(claim.Path); errors.Is(err, fs.ErrNotExist) {
 			live = false
 			dc.Issues = append(dc.Issues, Issue{Code: "stale_claim", Message: "the worktree does not exist"})
 		} else if a.Locator != nil {
-			if _, detectErr := a.Locator.Detect(claim.Path); detectErr != nil {
-				live = false
-				dc.Issues = append(dc.Issues, Issue{Code: "stale_claim", Message: "the path exists but is not a git worktree; run portucca release"})
+			claimCtx, claimDetectErr = a.Locator.Detect(claim.Path)
+			if claimDetectErr != nil {
+				if errors.Is(claimDetectErr, project.ErrNotRepo) {
+					live = false
+					dc.Issues = append(dc.Issues, Issue{Code: "stale_claim", Message: "the path exists but is not a git worktree; run portucca release", Hint: "run portucca release"})
+				} else {
+					result.Warnings = append(result.Warnings, projectIssue(claimDetectErr))
+				}
 			}
 		}
 		dc.Live = live
 		if live {
 			var claimCfg domain.Config
 			var cfgErr error
-			if claimCtx, claimDetectErr := a.Locator.Detect(claim.Path); claimDetectErr == nil {
+			if claimDetectErr == nil && claimCtx.Root != "" {
 				claimCfg, _, cfgErr = a.loadConfigFor(claimCtx)
 			} else {
 				claimCfg, _, cfgErr = a.Config.LoadRoot(claim.Path)

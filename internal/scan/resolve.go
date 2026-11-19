@@ -50,7 +50,7 @@ func (s *scanner) result() Detected {
 			case !pkg.hasRun:
 				keepRootEnv = true
 				delete(s.byDir, ".")
-				s.warn("ignoring root .env/package.json signals in a multi-service repository; use --service to declare a root service")
+				s.warn("root .env port keys are kept as candidates; the root is not treated as a service in a multi-service repository")
 			case !s.rootHasPortSignal(c, pkg):
 				keepRootEnv = true
 				delete(s.byDir, ".")
@@ -68,7 +68,7 @@ func (s *scanner) result() Detected {
 				c.ports = ports
 				if ignoredEnv {
 					keepRootEnv = true
-					s.warn("ignoring root .env port signals in a multi-service repository; use --service to declare a root service")
+					s.warn("root .env port keys are kept as candidates; the root is not treated as a service in a multi-service repository")
 				}
 			}
 		}

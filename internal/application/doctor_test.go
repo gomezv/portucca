@@ -570,3 +570,38 @@ func TestDoctorClaimNotWorktree(t *testing.T) {
 		t.Fatalf("issues = %+v", got.Claims[0].Issues)
 	}
 }
+
+func TestDoctorClaimGitMissing(t *testing.T) {
+	root := t.TempDir()
+	path := t.TempDir()
+	cfg := domain.Config{
+		Version: 1, Project: "app",
+		Services: map[domain.ServiceName]domain.Service{"web": {MainPort: 3000, StartPort: 3001}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version:   2,
+		Worktrees: []domain.Claim{{Project: "app", Path: path}},
+	}}
+	app := testApp(fakeLocator{err: project.ErrGitMissing}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Claims) != 1 || !got.Claims[0].Live {
+		t.Fatalf("claims = %+v", got.Claims)
+	}
+	for _, issue := range got.Claims[0].Issues {
+		if issue.Code == "stale_claim" {
+			t.Fatalf("false stale claim: %+v", got.Claims[0].Issues)
+		}
+	}
+	found := false
+	for _, warning := range got.Warnings {
+		if warning.Code == "git_missing" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("warnings = %+v", got.Warnings)
+	}
+}

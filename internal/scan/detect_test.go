@@ -134,7 +134,7 @@ func TestScanIgnoresRootEnvInMonorepo(t *testing.T) {
 	if len(got.Services) != 1 || got.Services[0].Name != "api" {
 		t.Fatalf("services = %+v, want only api", got.Services)
 	}
-	if len(got.Warnings) == 0 || !strings.Contains(strings.Join(got.Warnings, " "), "ignoring root") {
+	if len(got.Warnings) == 0 || !strings.Contains(strings.Join(got.Warnings, " "), "kept as candidates") {
 		t.Fatalf("warnings = %+v, want the root warning", got.Warnings)
 	}
 }
@@ -348,7 +348,7 @@ func TestScanKeepsRootServiceInMonorepo(t *testing.T) {
 	if len(got.CopyFromMain) != 1 || copyPaths(got.CopyFromMain)[0] != "apps/api/.env" {
 		t.Fatalf("copyFromMain = %+v, want only apps/api/.env", got.CopyFromMain)
 	}
-	if !strings.Contains(strings.Join(got.Warnings, " "), "ignoring root .env") {
+	if !strings.Contains(strings.Join(got.Warnings, " "), "kept as candidates") {
 		t.Fatalf("warnings = %+v, want the root .env warning", got.Warnings)
 	}
 }

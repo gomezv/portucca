@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gomezv/portucca/internal/domain"
+	"github.com/gomezv/portucca/internal/project"
 )
 
 type OverviewService struct {
@@ -68,8 +69,8 @@ func (a *App) Overview(ctx context.Context) (OverviewResult, error) {
 			fallback = &cfg
 		}
 		cfg, cfgErr := a.overviewConfig(claim.Path, fallback)
-		live, missing := a.claimLive(claim.Path)
-		res.Worktrees = append(res.Worktrees, buildClaimOverview(claim, cfg, cfgErr, live, missing))
+		live, missing, liveErr := a.claimLive(claim.Path)
+		res.Worktrees = append(res.Worktrees, buildClaimOverview(claim, cfg, cfgErr, live, missing, liveErr))
 	}
 	sort.Slice(res.Worktrees, func(i, j int) bool {
 		if res.Worktrees[i].Project != res.Worktrees[j].Project {
@@ -168,7 +169,7 @@ func buildMainOverview(main domain.MainReservation, cfg domain.Config, cfgErr er
 	return row
 }
 
-func buildClaimOverview(claim domain.Claim, cfg domain.Config, cfgErr error, live, missing bool) OverviewWorktree {
+func buildClaimOverview(claim domain.Claim, cfg domain.Config, cfgErr error, live, missing bool, liveErr error) OverviewWorktree {
 	row := OverviewWorktree{
 		Project:   claim.Project,
 		Path:      claim.Path,
@@ -184,6 +185,9 @@ func buildClaimOverview(claim domain.Claim, cfg domain.Config, cfgErr error, liv
 		} else {
 			row.Issues = append(row.Issues, Issue{Code: "stale_worktree", Message: "the path exists but is not a git worktree; run portucca release", Hint: "run portucca release"})
 		}
+	}
+	if liveErr != nil {
+		row.Issues = append(row.Issues, Issue{Code: "git_missing", Message: liveErr.Error(), Hint: "ensure git is available"})
 	}
 	for _, name := range sortedServiceNames(claim.Services) {
 		sc := claim.Services[name]
@@ -250,17 +254,20 @@ func sortedServiceNames[T any](services map[domain.ServiceName]T) []domain.Servi
 	return names
 }
 
-func (a *App) claimLive(path string) (live, missing bool) {
-	if _, err := os.Stat(path); err != nil {
-		return false, errors.Is(err, fs.ErrNotExist)
+func (a *App) claimLive(path string) (live, missing bool, err error) {
+	if _, statErr := os.Stat(path); statErr != nil {
+		return false, errors.Is(statErr, fs.ErrNotExist), nil
 	}
 	if a.Locator == nil {
-		return true, false
+		return true, false, nil
 	}
-	if _, err := a.Locator.Detect(path); err != nil {
-		return false, false
+	if _, detectErr := a.Locator.Detect(path); detectErr != nil {
+		if errors.Is(detectErr, project.ErrNotRepo) {
+			return false, false, nil
+		}
+		return true, false, detectErr
 	}
-	return true, false
+	return true, false, nil
 }
 
 func pathLive(path string) bool {

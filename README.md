@@ -166,7 +166,10 @@ Example env files such as `.env.example` are only a fallback for `mainPort` when
 determine every required value, it writes nothing and lists the gaps; add `--project` or
 `--service` to fill them. A missing port gap names the service and the files the scan
 inspected, and it reminds you that framework defaults (such as Next.js `3000`) are not
-assumed. `--scan` and `--preset` are mutually exclusive.
+assumed. Root `.env*` port keys in a multi-service repository are mapped to services by
+`<SERVICE>_PORT`, then by the final `mainPort` value; the key is added to `env` and its file
+to `bootstrap.copyFromMain`. Ambiguous root keys are reported as warnings. `--scan` and
+`--preset` are mutually exclusive.
 
 For Next.js projects, plain `npm run dev` ignores the `PORT` in `.env`. `init --scan` can wrap
 `scripts.dev` as `portucca run -- <original>` so the script uses the assigned port. Use
@@ -344,10 +347,11 @@ Press `i` on the project list to initialize a project. It asks for a repository 
 `--worktree` path or the current directory by default), accepts only a main checkout, runs
 the same scan as `init --scan`, and shows a preview of the project, services, ports, env
 targets, bootstrap, and warnings. Missing `mainPort` values can be filled inline; other gaps
-are shown with the CLI flags that resolve them. Nothing is written until you confirm. If
-`portucca.json` already exists, the preview warns and the overwrite needs explicit
-confirmation. After writing the config and the main reservation, the TUI offers the
-`wrap dev` preview when `scripts.dev` can be wrapped.
+are shown with the CLI flags that resolve them. Unique root env candidates are bound
+automatically; ambiguous ones open a selector, and skipped keys become warnings. Nothing is
+written until you confirm. If `portucca.json` already exists, the preview warns and the
+overwrite needs explicit confirmation. After writing the config and the main reservation, the
+TUI offers the `wrap dev` preview when `scripts.dev` can be wrapped.
 
 It requires an interactive terminal and does not support `--json`. `--worktree` opens the
 project for that path and selects the row; `--config` does not apply to the snapshot or the

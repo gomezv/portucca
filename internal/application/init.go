@@ -26,7 +26,14 @@ type InitRequest struct {
 	Scan            bool
 	Compose         bool
 	ExcludeServices []string
+	Env             []EnvBinding
 	WrapScript      bool
+}
+
+type EnvBinding struct {
+	Service domain.ServiceName
+	File    string
+	Key     string
 }
 
 type InitResult struct {
@@ -50,10 +57,11 @@ type InitScan struct {
 }
 
 type mergedScan struct {
-	Config   domain.Config
-	Sources  []ScanSource
-	Warnings []string
-	Gaps     []scan.Gap
+	Config        domain.Config
+	Sources       []ScanSource
+	Warnings      []string
+	Gaps          []scan.Gap
+	EnvCandidates []EnvCandidate
 }
 
 func (a *App) Init(ctx context.Context, req InitRequest) (InitResult, error) {
@@ -190,10 +198,13 @@ func parseExplicitServices(specs []string) (map[domain.ServiceName]domain.Servic
 	return out, nil
 }
 
-func mergeDetected(req InitRequest, det scan.Detected, explicit map[domain.ServiceName]domain.Service) mergedScan {
+func mergeDetected(req InitRequest, det scan.Detected, explicit map[domain.ServiceName]domain.Service) (mergedScan, error) {
+	det.Services = append([]scan.Service(nil), det.Services...)
 	services := map[domain.ServiceName]domain.Service{}
 	gaps := append([]scan.Gap{}, det.Gaps...)
 	warnings := append([]string{}, det.Warnings...)
+	usedRoot := map[string]bool{}
+	conventions := map[domain.ServiceName]scan.EnvSignal{}
 	if len(explicit) > 0 {
 		gaps = nil
 		for name, svc := range explicit {
@@ -210,6 +221,17 @@ func mergeDetected(req InitRequest, det scan.Detected, explicit map[domain.Servi
 			warnings = append(warnings, "ignoring detected services: "+strings.Join(dropped, ", "))
 		}
 	} else {
+		for i := range det.Services {
+			svc := &det.Services[i]
+			if svc.MainPort != nil || hasPortGap(gaps, svc.Name) {
+				continue
+			}
+			if sig, ok := conventionRootEnv(*svc, det.RootEnv, usedRoot); ok {
+				svc.MainPort = &scan.Value{Value: strconv.Itoa(sig.Value), Source: sig.Source}
+				usedRoot[rootEnvKey(sig)] = true
+				conventions[svc.Name] = sig
+			}
+		}
 		for _, svc := range det.Services {
 			if !domain.ValidServiceName(string(svc.Name)) {
 				gaps = append(gaps, scan.Gap{
@@ -262,20 +284,174 @@ func mergeDetected(req InitRequest, det scan.Detected, explicit map[domain.Servi
 	}
 
 	targets := filterEnv(det.Env, services, &warnings)
+	copySignals := append([]scan.CopyFile{}, det.CopyFromMain...)
+	withTarget := map[domain.ServiceName]bool{}
+	for _, target := range targets {
+		withTarget[target.Service] = true
+	}
+
+	convNames := make([]string, 0, len(conventions))
+	for name := range conventions {
+		convNames = append(convNames, string(name))
+	}
+	sort.Strings(convNames)
+	for _, raw := range convNames {
+		name := domain.ServiceName(raw)
+		sig := conventions[name]
+		if withTarget[name] {
+			warnings = append(warnings, "ignoring root env "+sig.Source+": service "+raw+" already has an env target")
+			continue
+		}
+		targets = append(targets, rootEnvTarget(name, sig))
+		copySignals = append(copySignals, scan.CopyFile{Service: name, File: sig.File})
+		withTarget[name] = true
+	}
+
+	for _, raw := range sortedInitServiceNames(services) {
+		name := domain.ServiceName(raw)
+		svc := services[name]
+		if withTarget[name] || !svc.MainPort.Valid() {
+			continue
+		}
+		matches := make([]scan.EnvSignal, 0)
+		for _, sig := range det.RootEnv {
+			if !usedRoot[rootEnvKey(sig)] && sig.Value == int(svc.MainPort) {
+				matches = append(matches, sig)
+			}
+		}
+		if len(matches) != 1 {
+			continue
+		}
+		sig := matches[0]
+		targets = append(targets, rootEnvTarget(name, sig))
+		copySignals = append(copySignals, scan.CopyFile{Service: name, File: sig.File})
+		usedRoot[rootEnvKey(sig)] = true
+		withTarget[name] = true
+	}
+
+	for _, binding := range req.Env {
+		name := binding.Service
+		if _, ok := services[name]; !ok {
+			return mergedScan{}, apperr.New("usage", "unknown env service "+string(name), "use a service from the proposal")
+		}
+		if withTarget[name] {
+			return mergedScan{}, apperr.New("usage", "service "+string(name)+" already has an env target", "choose a service without a target")
+		}
+		sig, ok := findRootEnv(det.RootEnv, usedRoot, binding.File, binding.Key)
+		if !ok {
+			return mergedScan{}, apperr.New("usage", "env binding "+binding.File+":"+binding.Key+" is not a remaining root candidate", "pick a candidate from the scan")
+		}
+		targets = append(targets, rootEnvTarget(name, sig))
+		copySignals = append(copySignals, scan.CopyFile{Service: name, File: sig.File})
+		usedRoot[rootEnvKey(sig)] = true
+		withTarget[name] = true
+	}
+
+	candidates := make([]EnvCandidate, 0)
+	for _, sig := range det.RootEnv {
+		if usedRoot[rootEnvKey(sig)] {
+			continue
+		}
+		matched := rootEnvMatches(sig, services)
+		suggested := make([]domain.ServiceName, 0, len(matched))
+		for _, name := range matched {
+			if !withTarget[name] {
+				suggested = append(suggested, name)
+			}
+		}
+		if len(matched) > 0 && len(suggested) == 0 {
+			warnings = append(warnings, "ignoring root env "+sig.Source+": matching services already have env targets")
+			continue
+		}
+		candidates = append(candidates, EnvCandidate{
+			Value: sig.Value, File: sig.File, Key: sig.Key, Source: sig.Source, Suggested: suggested,
+		})
+		warnings = append(warnings, "root env "+sig.Source+" has no unique service target; use the TUI to map it")
+	}
+
+	targets = filterEnv(targets, services, &warnings)
 	env := make([]domain.EnvTarget, 0, len(targets))
 	for _, target := range targets {
 		env = append(env, domain.EnvTarget{
 			Service: target.Service, File: target.File, Key: target.Key, Template: target.Template,
 		})
 	}
-	copyFiles := filterCopy(det.CopyFromMain, services)
+	copyFiles := filterCopy(copySignals, services)
 	cfg := domain.Config{
 		Version: domain.ConfigVersion, Project: projectName, Services: services, Env: env,
 		Bootstrap: domain.Bootstrap{CopyFromMain: copyFiles},
 	}
 	sources := buildSources(explicit, det, services, targets, copyFiles, projectName, projectSource)
 	sort.Strings(warnings)
-	return mergedScan{Config: cfg, Sources: sources, Warnings: warnings, Gaps: gaps}
+	return mergedScan{Config: cfg, Sources: sources, Warnings: warnings, Gaps: gaps, EnvCandidates: candidates}, nil
+}
+
+func conventionPortKey(name domain.ServiceName) string {
+	key := strings.ToUpper(strings.NewReplacer("-", "_", ".", "_").Replace(string(name)))
+	return key + "_PORT"
+}
+
+func rootEnvKey(sig scan.EnvSignal) string {
+	return sig.File + "\x00" + sig.Key
+}
+
+func conventionRootEnv(svc scan.Service, signals []scan.EnvSignal, used map[string]bool) (scan.EnvSignal, bool) {
+	key := conventionPortKey(svc.Name)
+	var best scan.EnvSignal
+	found := false
+	for _, sig := range signals {
+		if used[rootEnvKey(sig)] || strings.ToUpper(sig.Key) != key {
+			continue
+		}
+		if !found || sig.Rank < best.Rank {
+			best, found = sig, true
+			continue
+		}
+		if sig.Rank == best.Rank {
+			return scan.EnvSignal{}, false
+		}
+	}
+	return best, found
+}
+
+func rootEnvTarget(name domain.ServiceName, sig scan.EnvSignal) scan.EnvTarget {
+	return scan.EnvTarget{Service: name, File: sig.File, Key: sig.Key, Source: sig.Source}
+}
+
+func findRootEnv(signals []scan.EnvSignal, used map[string]bool, file, key string) (scan.EnvSignal, bool) {
+	for _, sig := range signals {
+		if !used[rootEnvKey(sig)] && sig.File == file && sig.Key == key {
+			return sig, true
+		}
+	}
+	return scan.EnvSignal{}, false
+}
+
+func rootEnvMatches(sig scan.EnvSignal, services map[domain.ServiceName]domain.Service) []domain.ServiceName {
+	set := map[domain.ServiceName]bool{}
+	for name, svc := range services {
+		if svc.MainPort.Valid() && int(svc.MainPort) == sig.Value {
+			set[name] = true
+		}
+		if strings.ToUpper(sig.Key) == conventionPortKey(name) {
+			set[name] = true
+		}
+	}
+	out := make([]domain.ServiceName, 0, len(set))
+	for name := range set {
+		out = append(out, name)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func sortedInitServiceNames(services map[domain.ServiceName]domain.Service) []string {
+	out := make([]string, 0, len(services))
+	for name := range services {
+		out = append(out, string(name))
+	}
+	sort.Strings(out)
+	return out
 }
 
 func hasPortGap(gaps []scan.Gap, name domain.ServiceName) bool {

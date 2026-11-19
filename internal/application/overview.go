@@ -68,7 +68,8 @@ func (a *App) Overview(ctx context.Context) (OverviewResult, error) {
 			fallback = &cfg
 		}
 		cfg, cfgErr := a.overviewConfig(claim.Path, fallback)
-		res.Worktrees = append(res.Worktrees, buildClaimOverview(claim, cfg, cfgErr))
+		live, missing := a.claimLive(claim.Path)
+		res.Worktrees = append(res.Worktrees, buildClaimOverview(claim, cfg, cfgErr, live, missing))
 	}
 	sort.Slice(res.Worktrees, func(i, j int) bool {
 		if res.Worktrees[i].Project != res.Worktrees[j].Project {
@@ -167,18 +168,22 @@ func buildMainOverview(main domain.MainReservation, cfg domain.Config, cfgErr er
 	return row
 }
 
-func buildClaimOverview(claim domain.Claim, cfg domain.Config, cfgErr error) OverviewWorktree {
+func buildClaimOverview(claim domain.Claim, cfg domain.Config, cfgErr error, live, missing bool) OverviewWorktree {
 	row := OverviewWorktree{
 		Project:   claim.Project,
 		Path:      claim.Path,
 		Kind:      "worktree",
-		Live:      pathLive(claim.Path),
+		Live:      live,
 		Services:  []OverviewService{},
 		Issues:    append([]Issue{}, configIssues(cfgErr)...),
 		UpdatedAt: claim.UpdatedAt,
 	}
 	if !row.Live {
-		row.Issues = append(row.Issues, Issue{Code: "stale_path", Message: "the worktree path does not exist", Hint: "run portucca prune"})
+		if missing {
+			row.Issues = append(row.Issues, Issue{Code: "stale_path", Message: "the worktree path does not exist", Hint: "run portucca prune"})
+		} else {
+			row.Issues = append(row.Issues, Issue{Code: "stale_worktree", Message: "the path exists but is not a git worktree; run portucca release", Hint: "run portucca release"})
+		}
 	}
 	for _, name := range sortedServiceNames(claim.Services) {
 		sc := claim.Services[name]
@@ -243,6 +248,19 @@ func sortedServiceNames[T any](services map[domain.ServiceName]T) []domain.Servi
 	}
 	sort.Slice(names, func(i, j int) bool { return names[i] < names[j] })
 	return names
+}
+
+func (a *App) claimLive(path string) (live, missing bool) {
+	if _, err := os.Stat(path); err != nil {
+		return false, errors.Is(err, fs.ErrNotExist)
+	}
+	if a.Locator == nil {
+		return true, false
+	}
+	if _, err := a.Locator.Detect(path); err != nil {
+		return false, false
+	}
+	return true, false
 }
 
 func pathLive(path string) bool {

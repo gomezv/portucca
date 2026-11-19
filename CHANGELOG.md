@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `portucca tui` can initialize a project with `i`: it scans a main checkout, fills missing
   `mainPort`s inline, previews the config, and offers the dev-script wrap after writing.
+- `init --scan` maps root `.env*` port keys to services by `<SERVICE>_PORT`, then by the
+  final `mainPort` value; the TUI init flow auto-binds unique matches and offers a selector
+  for ambiguous ones, adding the root env file to `bootstrap.copyFromMain`.
 
 ## [0.6.0] - 2026-11-13
 

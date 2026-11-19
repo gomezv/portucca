@@ -546,3 +546,27 @@ func TestDoctorReportsRegistryV1(t *testing.T) {
 		t.Fatalf("warnings = %+v, want registry_v1", got.Warnings)
 	}
 }
+
+func TestDoctorClaimNotWorktree(t *testing.T) {
+	root := t.TempDir()
+	path := t.TempDir()
+	cfg := domain.Config{
+		Version: 1, Project: "app",
+		Services: map[domain.ServiceName]domain.Service{"web": {MainPort: 3000, StartPort: 3001}},
+	}
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version:   2,
+		Worktrees: []domain.Claim{{Project: "app", Path: path}},
+	}}
+	app := testApp(fakeLocator{err: project.ErrNotRepo}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.OK || len(got.Claims) != 1 || got.Claims[0].Live {
+		t.Fatalf("doctor = %+v", got)
+	}
+	if !hasIssueCode(got.Claims[0].Issues, "stale_claim") {
+		t.Fatalf("issues = %+v", got.Claims[0].Issues)
+	}
+}

@@ -894,3 +894,13 @@ func TestRunCommandFields(t *testing.T) {
 		t.Fatalf("cmd = %+v", cmd)
 	}
 }
+
+func TestStatusForStaleWorktree(t *testing.T) {
+	w := application.OverviewWorktree{
+		Kind: "worktree", Live: false,
+		Issues: []application.Issue{{Code: "stale_worktree", Message: "not a worktree"}},
+	}
+	if got := statusText(w); !strings.Contains(got, "✖ 1") {
+		t.Fatalf("status = %q", got)
+	}
+}

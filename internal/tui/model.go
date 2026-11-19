@@ -439,7 +439,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		s.path = msg.path
 		s.stage = initBusyStage
-		return m, m.analyzeInit(nil)
+		return m, m.analyzeInit(nil, nil)
 	case initAnalyzedMsg:
 		if m.init == nil {
 			return m, nil
@@ -1153,7 +1153,7 @@ func statusText(w application.OverviewWorktree) string {
 
 func isErrorIssue(code string) bool {
 	switch code {
-	case "stale_path", "config_invalid", "claim_out_of_band", "main_port_mismatch":
+	case "stale_path", "stale_worktree", "config_invalid", "claim_out_of_band", "main_port_mismatch":
 		return true
 	default:
 		return false

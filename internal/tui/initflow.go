@@ -14,7 +14,7 @@ import (
 
 type InitFlow interface {
 	Inspect(ctx context.Context, path string) (application.InitPath, error)
-	Analyze(ctx context.Context, path string, services []string) (application.InitProposal, error)
+	Analyze(ctx context.Context, path string, services []string, env []application.EnvBinding) (application.InitProposal, error)
 	Apply(ctx context.Context, proposal application.InitProposal, force bool) (application.InitResult, error)
 }
 
@@ -29,6 +29,7 @@ const (
 	initPathStage initStage = iota
 	initBusyStage
 	initGapStage
+	initEnvStage
 	initPreviewStage
 	initBlockedStage
 )
@@ -43,16 +44,21 @@ type initPorts struct {
 }
 
 type initState struct {
-	stage      initStage
-	path       string
-	input      string
-	proposal   application.InitProposal
-	gaps       []initPortGap
-	gapIndex   int
-	mainInput  string
-	startInput string
-	filled     map[string]initPorts
-	err        error
+	stage           initStage
+	path            string
+	input           string
+	proposal        application.InitProposal
+	gaps            []initPortGap
+	gapIndex        int
+	mainInput       string
+	startInput      string
+	filled          map[string]initPorts
+	services        []string
+	bindings        []application.EnvBinding
+	envCandidates   []application.EnvCandidate
+	envIndex        int
+	envServiceIndex int
+	err             error
 }
 
 type initInspectedMsg struct {
@@ -64,6 +70,7 @@ type initInspectedMsg struct {
 type initAnalyzedMsg struct {
 	path     string
 	services []string
+	env      []application.EnvBinding
 	proposal application.InitProposal
 	err      error
 }
@@ -99,11 +106,11 @@ func (m *Model) inspectInit(path string) tea.Cmd {
 	}
 }
 
-func (m *Model) analyzeInit(services []string) tea.Cmd {
+func (m *Model) analyzeInit(services []string, env []application.EnvBinding) tea.Cmd {
 	flow, path := m.initFlow, m.init.path
 	return func() tea.Msg {
-		proposal, err := flow.Analyze(context.Background(), path, services)
-		return initAnalyzedMsg{path: path, services: services, proposal: proposal, err: err}
+		proposal, err := flow.Analyze(context.Background(), path, services, env)
+		return initAnalyzedMsg{path: path, services: services, env: env, proposal: proposal, err: err}
 	}
 }
 
@@ -152,6 +159,8 @@ func (m *Model) updateInit(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.updateInitPath(msg)
 	case initGapStage:
 		return m.updateInitGap(msg)
+	case initEnvStage:
+		return m.updateInitEnv(msg)
 	case initPreviewStage:
 		switch msg.String() {
 		case "y", "enter":
@@ -241,7 +250,8 @@ func (m *Model) analyzeInitGaps() (tea.Model, tea.Cmd) {
 	s := m.init
 	s.err = nil
 	s.stage = initBusyStage
-	return *m, m.analyzeInit(initServiceSpecs(s.proposal, s.filled))
+	s.services = initServiceSpecs(s.proposal, s.filled)
+	return *m, m.analyzeInit(s.services, s.bindings)
 }
 
 func (m *Model) handleInitAnalyzed(msg initAnalyzedMsg) {
@@ -251,6 +261,13 @@ func (m *Model) handleInitAnalyzed(msg initAnalyzedMsg) {
 	}
 	if msg.err != nil {
 		s.err = msg.err
+		if len(msg.env) > 0 {
+			s.bindings = nil
+			s.envIndex = 0
+			s.envServiceIndex = 0
+			s.stage = initEnvStage
+			return
+		}
 		if len(msg.services) == 0 {
 			s.stage = initPathStage
 			return
@@ -282,7 +299,126 @@ func (m *Model) handleInitAnalyzed(msg initAnalyzedMsg) {
 		s.stage = initGapStage
 		return
 	}
+	if len(msg.proposal.EnvCandidates) > 0 && len(msg.env) == 0 {
+		s.envCandidates = append([]application.EnvCandidate{}, msg.proposal.EnvCandidates...)
+		s.envIndex = 0
+		s.envServiceIndex = 0
+		s.stage = initEnvStage
+		return
+	}
+	if len(msg.env) > 0 {
+		m.appendUnmappedWarnings(&s.proposal)
+	}
 	s.stage = initPreviewStage
+}
+
+func (m *Model) updateInitEnv(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.init
+	if s.envIndex >= len(s.envCandidates) {
+		return m.finishInitEnv()
+	}
+	choices := m.initEnvChoices(s)
+	switch msg.String() {
+	case "up", "k":
+		if len(choices) > 0 {
+			s.envServiceIndex = (s.envServiceIndex - 1 + len(choices)) % len(choices)
+		}
+		return *m, nil
+	case "down", "j":
+		if len(choices) > 0 {
+			s.envServiceIndex = (s.envServiceIndex + 1) % len(choices)
+		}
+		return *m, nil
+	case "s":
+		s.envIndex++
+		s.envServiceIndex = 0
+		if s.envIndex >= len(s.envCandidates) {
+			return m.finishInitEnv()
+		}
+		return *m, nil
+	case "enter":
+		if len(choices) == 0 {
+			s.envIndex++
+			s.envServiceIndex = 0
+			s.err = nil
+			if s.envIndex >= len(s.envCandidates) {
+				return m.finishInitEnv()
+			}
+			return *m, nil
+		}
+		candidate := s.envCandidates[s.envIndex]
+		s.bindings = append(s.bindings, application.EnvBinding{
+			Service: choices[s.envServiceIndex], File: candidate.File, Key: candidate.Key,
+		})
+		s.envIndex++
+		s.envServiceIndex = 0
+		s.err = nil
+		if s.envIndex >= len(s.envCandidates) {
+			return m.finishInitEnv()
+		}
+		return *m, nil
+	}
+	return *m, nil
+}
+
+func (m *Model) initEnvChoices(s *initState) []domain.ServiceName {
+	if s.envIndex >= len(s.envCandidates) {
+		return nil
+	}
+	bound := map[domain.ServiceName]bool{}
+	for _, binding := range s.bindings {
+		bound[binding.Service] = true
+	}
+	candidate := s.envCandidates[s.envIndex]
+	out := make([]domain.ServiceName, 0)
+	if len(candidate.Suggested) > 0 {
+		for _, name := range candidate.Suggested {
+			if !bound[name] {
+				out = append(out, name)
+			}
+		}
+		return out
+	}
+	withTarget := map[domain.ServiceName]bool{}
+	for _, target := range s.proposal.Config.Env {
+		withTarget[target.Service] = true
+	}
+	names := make([]string, 0, len(s.proposal.Services))
+	for name := range s.proposal.Services {
+		if !withTarget[name] && !bound[name] {
+			names = append(names, string(name))
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		out = append(out, domain.ServiceName(name))
+	}
+	return out
+}
+
+func (m *Model) finishInitEnv() (tea.Model, tea.Cmd) {
+	s := m.init
+	if len(s.bindings) > 0 {
+		s.stage = initBusyStage
+		return *m, m.analyzeInit(s.services, s.bindings)
+	}
+	m.appendUnmappedWarnings(&s.proposal)
+	s.stage = initPreviewStage
+	return *m, nil
+}
+
+func (m *Model) appendUnmappedWarnings(p *application.InitProposal) {
+	existing := map[string]bool{}
+	for _, warning := range p.Warnings {
+		existing[warning] = true
+	}
+	for _, candidate := range p.EnvCandidates {
+		warning := "unmapped env: " + candidate.File + ":" + candidate.Key
+		if !existing[warning] {
+			p.Warnings = append(p.Warnings, warning)
+			existing[warning] = true
+		}
+	}
 }
 
 func fillableInitGaps(p application.InitProposal) ([]initPortGap, []application.InitGap) {
@@ -378,6 +514,8 @@ func (m Model) initView() string {
 		return m.initBusyView()
 	case initGapStage:
 		return m.initGapView()
+	case initEnvStage:
+		return m.initEnvView()
 	case initBlockedStage:
 		return m.initBlockedView()
 	case initPreviewStage:
@@ -416,6 +554,32 @@ func (m Model) initGapView() string {
 		lines = append(lines, redStyle.Render(actionErrText(s.err)), "")
 	}
 	lines = append(lines, mutedStyle.Render("enter next · esc cancel"))
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) initEnvView() string {
+	s := m.init
+	lines := []string{accentStyle.Bold(true).Render("init env"), mutedStyle.Render(s.path), ""}
+	if s.envIndex < len(s.envCandidates) {
+		candidate := s.envCandidates[s.envIndex]
+		lines = append(lines, fmt.Sprintf("%s:%s=%d", candidate.File, candidate.Key, candidate.Value), "")
+		choices := m.initEnvChoices(s)
+		if len(choices) == 0 {
+			lines = append(lines, mutedStyle.Render("no services without an env target"), "")
+		}
+		for i, name := range choices {
+			cursor := "  "
+			if i == s.envServiceIndex {
+				cursor = "> "
+			}
+			lines = append(lines, cursor+string(name))
+		}
+		lines = append(lines, "")
+	}
+	if s.err != nil {
+		lines = append(lines, redStyle.Render(actionErrText(s.err)), "")
+	}
+	lines = append(lines, mutedStyle.Render("enter bind · s skip · esc cancel"))
 	return strings.Join(lines, "\n")
 }
 

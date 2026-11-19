@@ -37,10 +37,10 @@ func TestTUIInitAdapter(t *testing.T) {
 	if fake.inspectPath != "/repo" {
 		t.Fatalf("inspect path = %q", fake.inspectPath)
 	}
-	if _, err := adapter.Analyze(context.Background(), "/repo", []string{"api:1:2"}); err != nil {
+	if _, err := adapter.Analyze(context.Background(), "/repo", []string{"api:1:2"}, []application.EnvBinding{{Service: "api", File: ".env", Key: "API_PORT"}}); err != nil {
 		t.Fatal(err)
 	}
-	if !fake.analyzeReq.Scan || fake.analyzeReq.Worktree != "/repo" || len(fake.analyzeReq.Services) != 1 {
+	if !fake.analyzeReq.Scan || fake.analyzeReq.Worktree != "/repo" || len(fake.analyzeReq.Services) != 1 || len(fake.analyzeReq.Env) != 1 {
 		t.Fatalf("analyze req = %+v", fake.analyzeReq)
 	}
 	if _, err := adapter.Apply(context.Background(), application.InitProposal{}, true); err != nil {

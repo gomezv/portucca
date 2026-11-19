@@ -26,8 +26,8 @@ func (i tuiInit) Inspect(ctx context.Context, path string) (application.InitPath
 	return i.app.InspectInitPath(ctx, path)
 }
 
-func (i tuiInit) Analyze(ctx context.Context, path string, services []string) (application.InitProposal, error) {
-	return i.app.AnalyzeInit(ctx, application.InitRequest{Scan: true, Worktree: path, Services: services})
+func (i tuiInit) Analyze(ctx context.Context, path string, services []string, env []application.EnvBinding) (application.InitProposal, error) {
+	return i.app.AnalyzeInit(ctx, application.InitRequest{Scan: true, Worktree: path, Services: services, Env: env})
 }
 
 func (i tuiInit) Apply(ctx context.Context, proposal application.InitProposal, force bool) (application.InitResult, error) {

@@ -162,11 +162,18 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 	byPort := map[domain.Port]string{}
 	for _, claim := range reg.Worktrees {
 		dc := DoctorClaim{Project: claim.Project, Path: claim.Path, Services: claim.Services, Issues: []Issue{}}
+		live := true
 		if _, err := os.Stat(claim.Path); errors.Is(err, fs.ErrNotExist) {
-			dc.Live = false
+			live = false
 			dc.Issues = append(dc.Issues, Issue{Code: "stale_claim", Message: "the worktree does not exist"})
-		} else {
-			dc.Live = true
+		} else if a.Locator != nil {
+			if _, detectErr := a.Locator.Detect(claim.Path); detectErr != nil {
+				live = false
+				dc.Issues = append(dc.Issues, Issue{Code: "stale_claim", Message: "the path exists but is not a git worktree; run portucca release"})
+			}
+		}
+		dc.Live = live
+		if live {
 			var claimCfg domain.Config
 			var cfgErr error
 			if claimCtx, claimDetectErr := a.Locator.Detect(claim.Path); claimDetectErr == nil {

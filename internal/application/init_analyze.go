@@ -24,18 +24,27 @@ type InitGap struct {
 	Flags   []string
 }
 
+type EnvCandidate struct {
+	Value     int
+	File      string
+	Key       string
+	Source    string
+	Suggested []domain.ServiceName
+}
+
 type InitProposal struct {
-	Root         string
-	MainRoot     string
-	IsMain       bool
-	ConfigPath   string
-	ConfigExists bool
-	Config       domain.Config
-	Project      domain.Project
-	Services     map[domain.ServiceName]domain.Service
-	Sources      []ScanSource
-	Warnings     []string
-	Gaps         []InitGap
+	Root          string
+	MainRoot      string
+	IsMain        bool
+	ConfigPath    string
+	ConfigExists  bool
+	Config        domain.Config
+	Project       domain.Project
+	Services      map[domain.ServiceName]domain.Service
+	Sources       []ScanSource
+	Warnings      []string
+	Gaps          []InitGap
+	EnvCandidates []EnvCandidate
 }
 
 func (a *App) InspectInitPath(ctx context.Context, path string) (InitPath, error) {
@@ -93,7 +102,10 @@ func (a *App) analyzeInit(ctx context.Context, c project.Context, req InitReques
 		}
 		return InitProposal{}, mergedScan{}, apperr.New("internal", err.Error(), "retry or use --service flags")
 	}
-	merged := mergeDetected(req, detected, explicit)
+	merged, err := mergeDetected(req, detected, explicit)
+	if err != nil {
+		return InitProposal{}, mergedScan{}, err
+	}
 	if len(merged.Gaps) == 0 {
 		if verr := merged.Config.Validate(); verr != nil {
 			if len(req.Services) > 0 {
@@ -121,6 +133,7 @@ func (a *App) analyzeInit(ctx context.Context, c project.Context, req InitReques
 		ConfigPath: path, ConfigExists: exists,
 		Config: merged.Config, Project: merged.Config.Project, Services: merged.Config.Services,
 		Sources: merged.Sources, Warnings: merged.Warnings, Gaps: toInitGaps(merged.Gaps),
+		EnvCandidates: merged.EnvCandidates,
 	}
 	return proposal, merged, nil
 }

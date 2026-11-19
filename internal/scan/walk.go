@@ -29,6 +29,14 @@ type Service struct {
 	Checked    []string `json:"-"`
 }
 
+type EnvSignal struct {
+	Value  int
+	File   string
+	Key    string
+	Source string
+	Rank   int
+}
+
 type EnvTarget struct {
 	Service    domain.ServiceName
 	File       string
@@ -55,6 +63,7 @@ type Detected struct {
 	Project      *Value
 	Services     []Service
 	Env          []EnvTarget
+	RootEnv      []EnvSignal
 	CopyFromMain []CopyFile
 	Warnings     []string
 	Gaps         []Gap

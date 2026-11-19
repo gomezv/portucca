@@ -21,6 +21,7 @@ type fakeInitFlow struct {
 	analyzeCalls int
 	analyzePath  string
 	services     []string
+	env          []application.EnvBinding
 	proposal     application.InitProposal
 	analyzeErr   error
 	applyCalls   int
@@ -35,10 +36,11 @@ func (f *fakeInitFlow) Inspect(_ context.Context, path string) (application.Init
 	return f.info, f.inspectErr
 }
 
-func (f *fakeInitFlow) Analyze(_ context.Context, path string, services []string) (application.InitProposal, error) {
+func (f *fakeInitFlow) Analyze(_ context.Context, path string, services []string, env []application.EnvBinding) (application.InitProposal, error) {
 	f.analyzeCalls++
 	f.analyzePath = path
 	f.services = append([]string{}, services...)
+	f.env = append([]application.EnvBinding{}, env...)
 	return f.proposal, f.analyzeErr
 }
 
@@ -573,5 +575,186 @@ func TestModelInitWrapUnchanged(t *testing.T) {
 	}
 	if m.notice != "init: project shoucca services=3" {
 		t.Fatalf("notice = %q", m.notice)
+	}
+}
+
+func envProposal(candidates []application.EnvCandidate, envTargets []domain.EnvTarget) application.InitProposal {
+	cfg := domain.Config{
+		Version: domain.ConfigVersion, Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"api": {MainPort: 3414, StartPort: 3415},
+			"web": {MainPort: 5413, StartPort: 5416},
+		},
+		Env: envTargets,
+	}
+	return application.InitProposal{
+		Root: "/repo", MainRoot: "/repo", IsMain: true, ConfigPath: "/repo/portucca.json",
+		Config: cfg, Project: "app", Services: cfg.Services, EnvCandidates: candidates,
+	}
+}
+
+func TestModelInitEnvSelector(t *testing.T) {
+	flow := &fakeInitFlow{
+		info: application.InitPath{Root: "/repo", MainRoot: "/repo", IsMain: true},
+		proposal: envProposal([]application.EnvCandidate{{
+			Value: 3414, File: ".env", Key: "SERVER_PORT", Source: ".env:SERVER_PORT",
+			Suggested: []domain.ServiceName{"api", "web"},
+		}}, nil),
+	}
+	m := initToAnalyzed(t, flow)
+	if m.init.stage != initEnvStage {
+		t.Fatalf("stage = %v, want env", m.init.stage)
+	}
+	view := m.View().Content
+	for _, want := range []string{".env:SERVER_PORT=3414", "api", "web"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("env view missing %q:\n%s", want, view)
+		}
+	}
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	m = next.(Model)
+	flow.proposal = envProposal(nil, []domain.EnvTarget{{Service: "web", File: ".env", Key: "SERVER_PORT"}})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("binding did not re-analyze")
+	}
+	msg := cmd()
+	if len(flow.env) != 1 || flow.env[0].Service != "web" || flow.env[0].Key != "SERVER_PORT" {
+		t.Fatalf("env = %+v", flow.env)
+	}
+	next, _ = m.Update(msg)
+	m = next.(Model)
+	if m.init.stage != initPreviewStage {
+		t.Fatalf("stage = %v, want preview", m.init.stage)
+	}
+	if !strings.Contains(m.View().Content, "env: .env:SERVER_PORT") {
+		t.Fatalf("preview missing env target:\n%s", m.View().Content)
+	}
+}
+
+func TestModelInitEnvSkip(t *testing.T) {
+	flow := &fakeInitFlow{
+		info: application.InitPath{Root: "/repo", MainRoot: "/repo", IsMain: true},
+		proposal: envProposal([]application.EnvCandidate{{
+			Value: 3414, File: ".env", Key: "SERVER_PORT", Source: ".env:SERVER_PORT",
+			Suggested: []domain.ServiceName{"api"},
+		}}, nil),
+	}
+	m := initToAnalyzed(t, flow)
+	if m.init.stage != initEnvStage {
+		t.Fatalf("stage = %v, want env", m.init.stage)
+	}
+	next, _ := m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	m = next.(Model)
+	if m.init.stage != initPreviewStage {
+		t.Fatalf("stage = %v, want preview", m.init.stage)
+	}
+	if flow.analyzeCalls != 1 {
+		t.Fatalf("analyzeCalls = %d, want 1", flow.analyzeCalls)
+	}
+	if !strings.Contains(m.View().Content, "unmapped env: .env:SERVER_PORT") {
+		t.Fatalf("preview missing unmapped warning:\n%s", m.View().Content)
+	}
+}
+
+func TestModelInitEnvBindAndSkip(t *testing.T) {
+	candidates := []application.EnvCandidate{
+		{Value: 3414, File: ".env", Key: "API_PORT", Source: ".env:API_PORT", Suggested: []domain.ServiceName{"api"}},
+		{Value: 3414, File: ".env", Key: "SERVER_PORT", Source: ".env:SERVER_PORT", Suggested: []domain.ServiceName{"api"}},
+	}
+	flow := &fakeInitFlow{
+		info:     application.InitPath{Root: "/repo", MainRoot: "/repo", IsMain: true},
+		proposal: envProposal(candidates, nil),
+	}
+	m := initToAnalyzed(t, flow)
+	if m.init.stage != initEnvStage {
+		t.Fatalf("stage = %v, want env", m.init.stage)
+	}
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("mixed bind+skip did not re-analyze")
+	}
+	flow.proposal = envProposal(
+		[]application.EnvCandidate{{Value: 3414, File: ".env", Key: "SERVER_PORT", Source: ".env:SERVER_PORT", Suggested: []domain.ServiceName{"api"}}},
+		[]domain.EnvTarget{{Service: "api", File: ".env", Key: "API_PORT"}},
+	)
+	msg := cmd()
+	if len(flow.env) != 1 || flow.env[0].Key != "API_PORT" {
+		t.Fatalf("env = %+v", flow.env)
+	}
+	next, _ = m.Update(msg)
+	m = next.(Model)
+	if m.init.stage != initPreviewStage {
+		t.Fatalf("stage = %v, want preview", m.init.stage)
+	}
+	if !strings.Contains(m.View().Content, "env: .env:API_PORT") || !strings.Contains(m.View().Content, "unmapped env: .env:SERVER_PORT") {
+		t.Fatalf("preview missing target/warning:\n%s", m.View().Content)
+	}
+}
+
+func TestModelInitEnvInvalidBinding(t *testing.T) {
+	flow := &fakeInitFlow{
+		info: application.InitPath{Root: "/repo", MainRoot: "/repo", IsMain: true},
+		proposal: envProposal([]application.EnvCandidate{{
+			Value: 3414, File: ".env", Key: "SERVER_PORT", Source: ".env:SERVER_PORT",
+			Suggested: []domain.ServiceName{"api"},
+		}}, nil),
+	}
+	m := initToAnalyzed(t, flow)
+	flow.analyzeErr = apperr.New("usage", "bad binding", "pick a candidate")
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if m.init.stage != initEnvStage || m.init.err == nil {
+		t.Fatalf("stage=%v err=%v", m.init.stage, m.init.err)
+	}
+	if !strings.Contains(m.View().Content, "bad binding") {
+		t.Fatalf("view missing error:\n%s", m.View().Content)
+	}
+}
+
+func TestModelInitEnvAuto(t *testing.T) {
+	flow := &fakeInitFlow{
+		info:     application.InitPath{Root: "/repo", MainRoot: "/repo", IsMain: true},
+		proposal: envProposal(nil, nil),
+	}
+	m := initToAnalyzed(t, flow)
+	if m.init.stage != initPreviewStage {
+		t.Fatalf("stage = %v, want preview", m.init.stage)
+	}
+}
+
+func TestModelInitEnvBindBoth(t *testing.T) {
+	candidates := []application.EnvCandidate{
+		{Value: 3414, File: ".env", Key: "API_PORT", Source: ".env:API_PORT", Suggested: []domain.ServiceName{"api"}},
+		{Value: 3414, File: ".env", Key: "SERVER_PORT", Source: ".env:SERVER_PORT", Suggested: []domain.ServiceName{"api"}},
+	}
+	flow := &fakeInitFlow{
+		info:     application.InitPath{Root: "/repo", MainRoot: "/repo", IsMain: true},
+		proposal: envProposal(candidates, nil),
+	}
+	m := initToAnalyzed(t, flow)
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	// The only suggested service is already bound; enter skips the candidate.
+	flow.proposal = envProposal(nil, []domain.EnvTarget{{Service: "api", File: ".env", Key: "API_PORT"}})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("bind+skip did not re-analyze")
+	}
+	msg := cmd()
+	if len(flow.env) != 1 || flow.env[0].Service != "api" {
+		t.Fatalf("env = %+v", flow.env)
+	}
+	next, _ = m.Update(msg)
+	m = next.(Model)
+	if m.init.err != nil || m.init.stage != initPreviewStage {
+		t.Fatalf("stage=%v err=%v", m.init.stage, m.init.err)
 	}
 }

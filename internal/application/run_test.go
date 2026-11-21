@@ -29,7 +29,7 @@ func runEnvFixture() (domain.Config, map[domain.ServiceName]domain.ServiceClaim)
 
 func TestRunEnvValuesAllServices(t *testing.T) {
 	cfg, services := runEnvFixture()
-	got, err := runEnvValues(cfg, services, "")
+	got, err := runEnvValues(cfg, services, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestRunEnvValuesAllServices(t *testing.T) {
 
 func TestRunEnvValuesServiceFilter(t *testing.T) {
 	cfg, services := runEnvFixture()
-	got, err := runEnvValues(cfg, services, "web")
+	got, err := runEnvValues(cfg, services, "web", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestRunEnvValuesConflict(t *testing.T) {
 		"web": {Port: 3002},
 		"api": {Port: 3004},
 	}
-	_, err := runEnvValues(cfg, services, "")
+	_, err := runEnvValues(cfg, services, "", "")
 	e, ok := apperr.As(err)
 	if !ok || e.Code != "env_conflict" {
 		t.Fatalf("err = %v, want env_conflict", err)
@@ -87,7 +87,7 @@ func TestRunEnvValuesConflictSameService(t *testing.T) {
 		t.Fatalf("fixture invalid: %v", err)
 	}
 	services := map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3002}}
-	_, err := runEnvValues(cfg, services, "")
+	_, err := runEnvValues(cfg, services, "", "")
 	e, ok := apperr.As(err)
 	if !ok || e.Code != "env_conflict" {
 		t.Fatalf("err = %v, want env_conflict", err)
@@ -97,6 +97,38 @@ func TestRunEnvValuesConflictSameService(t *testing.T) {
 	}
 	if strings.Contains(e.Hint, "--service") {
 		t.Fatalf("hint = %q, --service does not fix an intra-service conflict", e.Hint)
+	}
+}
+
+func TestRunEnvValuesWorktreeID(t *testing.T) {
+	cfg := domain.Config{Version: 1, Project: "app", Env: []domain.EnvTarget{
+		{Service: "web", File: ".env", Key: "PORT"},
+		{Service: "web", File: ".env", Key: "DATABASE_NAME", Template: "{{worktree}}"},
+	}}
+	services := map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3002}}
+	got, err := runEnvValues(cfg, services, "", "app_wt_abcd1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"DATABASE_NAME=app_wt_abcd1234", "PORT=3002"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestRunEnvValuesMainSkipsWorktreeID(t *testing.T) {
+	cfg := domain.Config{Version: 1, Project: "app", Env: []domain.EnvTarget{
+		{Service: "web", File: ".env", Key: "PORT"},
+		{Service: "web", File: ".env", Key: "DATABASE_NAME", Template: "{{worktree}}"},
+	}}
+	services := map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3002}}
+	got, err := runEnvValues(cfg, services, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"PORT=3002"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }
 

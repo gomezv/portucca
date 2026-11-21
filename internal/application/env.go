@@ -26,7 +26,7 @@ func (a *App) Env(ctx context.Context, worktree string) (EnvResult, error) {
 	}
 	if c.IsMain {
 		services := mainServices(cfg)
-		return EnvResult{Project: cfg.Project, WorktreePath: c.Root, IsMain: true, Services: services, Env: desiredEnv(c.Root, cfg, services)}, nil
+		return EnvResult{Project: cfg.Project, WorktreePath: c.Root, IsMain: true, Services: services, Env: desiredEnv(c.Root, cfg, services, "")}, nil
 	}
 	unlock, err := a.Locker.Lock(a.Registry.LockPath(), a.timeout(), true)
 	if err != nil {
@@ -41,5 +41,5 @@ func (a *App) Env(ctx context.Context, worktree string) (EnvResult, error) {
 	if own == nil {
 		return EnvResult{}, apperr.New("no_claim", "this worktree has no claim", "run portucca ensure first")
 	}
-	return EnvResult{Project: cfg.Project, WorktreePath: c.Root, Services: own.Services, Env: desiredEnv(c.Root, cfg, own.Services)}, nil
+	return EnvResult{Project: cfg.Project, WorktreePath: c.Root, Services: own.Services, Env: desiredEnv(c.Root, cfg, own.Services, worktreeID(c, cfg))}, nil
 }

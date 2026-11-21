@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gomezv/portucca/internal/domain"
+	"github.com/gomezv/portucca/internal/envfile"
 	"github.com/gomezv/portucca/internal/project"
 )
 
@@ -314,6 +315,44 @@ func TestDoctorReportsBootstrapSourceMissing(t *testing.T) {
 	}
 	if !hasWarning(got.Warnings, "bootstrap_source_missing") {
 		t.Fatalf("warnings = %+v, want bootstrap_source_missing", got.Warnings)
+	}
+}
+
+func TestDoctorWorktreeID(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("DATABASE_NAME=wrong\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := worktreeIDConfig()
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version: 2,
+		Worktrees: []domain.Claim{{
+			Project: "app", Path: root,
+			Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3001}},
+		}},
+		Mains: []domain.MainReservation{},
+	}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: "/repo"}}, cfg, reg, envfile.Store{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasWarning(got.Warnings, "env_out_of_sync") {
+		t.Fatalf("warnings = %+v, want env_out_of_sync", got.Warnings)
+	}
+}
+
+func TestDoctorMainSkipsWorktreeID(t *testing.T) {
+	root := t.TempDir()
+	cfg := worktreeIDConfig()
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root, IsMain: true}}, cfg, reg, &fakeEnv{})
+	got, err := app.Doctor(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasWarning(got.Warnings, "env_missing") {
+		t.Fatalf("warnings = %+v, want no env_missing for the worktree target", got.Warnings)
 	}
 }
 

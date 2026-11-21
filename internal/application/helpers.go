@@ -32,18 +32,28 @@ func mainEnsureResult(c project.Context, cfg domain.Config, cfgPath string) Ensu
 	services := mainServices(cfg)
 	return EnsureResult{
 		Project: cfg.Project, WorktreePath: c.Root, ConfigPath: cfgPath, IsMain: true,
-		Services: services, Env: desiredEnv(c.Root, cfg, services),
+		Services: services, Env: desiredEnv(c.Root, cfg, services, ""),
 	}
 }
 
-func desiredValues(cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim) map[string]map[string]string {
+func worktreeID(c project.Context, cfg domain.Config) string {
+	if c.IsMain {
+		return ""
+	}
+	return domain.WorktreeID(cfg.Project, c.Root)
+}
+
+func desiredValues(cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim, worktreeID string) map[string]map[string]string {
 	out := map[string]map[string]string{}
 	for _, target := range cfg.Env {
 		claim, ok := services[target.Service]
 		if !ok {
 			continue
 		}
-		value := envfile.RenderValue(claim.Port, target.Template)
+		value, applies := envfile.RenderValue(envfile.ValueContext{Port: claim.Port, WorktreeID: worktreeID}, target.Template)
+		if !applies {
+			continue
+		}
 		if out[target.File] == nil {
 			out[target.File] = map[string]string{}
 		}
@@ -52,8 +62,8 @@ func desiredValues(cfg domain.Config, services map[domain.ServiceName]domain.Ser
 	return out
 }
 
-func desiredEnv(root string, cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim) []EnvValue {
-	return desiredEnvFrom(root, desiredValues(cfg, services))
+func desiredEnv(root string, cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim, worktreeID string) []EnvValue {
+	return desiredEnvFrom(root, desiredValues(cfg, services, worktreeID))
 }
 
 func desiredEnvFrom(root string, values map[string]map[string]string) []EnvValue {

@@ -62,6 +62,12 @@ func TestConfigValidate(t *testing.T) {
 		{"bad template", func(c *Config) {
 			c.Env[2].Template = "http://localhost:{{port}}{{port}}"
 		}, "template"},
+		{"env worktree template", func(c *Config) {
+			c.Env = append(c.Env, EnvTarget{Service: "api", File: ".env.local", Key: "DATABASE_NAME", Template: "{{worktree}}"})
+		}, ""},
+		{"env mixed template", func(c *Config) {
+			c.Env = append(c.Env, EnvTarget{Service: "api", File: ".env.local", Key: "DATABASE_NAME", Template: "{{port}}{{worktree}}"})
+		}, "template"},
 		{"adoptFrom without env", func(c *Config) {
 			c.Services["web"] = Service{MainPort: 5173, StartPort: 5174, AdoptFrom: &EnvRef{File: "x", Key: "Y"}}
 		}, "adoptFrom"},
@@ -89,6 +95,46 @@ func TestConfigServiceNamesAreSorted(t *testing.T) {
 	got := c.ServiceNames()
 	if len(got) != 2 || got[0] != "api" || got[1] != "web" {
 		t.Fatalf("ServiceNames() = %v, want [api web]", got)
+	}
+}
+
+func TestWorktreeID(t *testing.T) {
+	tests := []struct{ name, project, root, want string }{
+		{"spaces", "app", "/repo/Plan 2", "app_plan_2_ec6b82ba"},
+		{"same basename other root", "app", "/other/Plan 2", "app_plan_2_1bada369"},
+		{"project dash", "my-app", "/repo/wt", "my_app_wt_cc994380"},
+		{"leading digit", "2app", "/repo/wt", "p_2app_wt_cc994380"},
+		{"unicode", "app", "/repo/Ñandú", "app_and_7e85336a"},
+		{"empty basename", "app", "", "app_wt_e3b0c442"},
+	}
+	for _, tt := range tests {
+		if got := WorktreeID(Project(tt.project), tt.root); got != tt.want {
+			t.Fatalf("%s: WorktreeID = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	long := WorktreeID("app", "/repo/"+strings.Repeat("a", 80))
+	wantLong := "app_" + strings.Repeat("a", 50) + "_ab07126d"
+	if long != wantLong || len(long) != 63 {
+		t.Fatalf("long ID = %q (%d bytes), want %q (63)", long, len(long), wantLong)
+	}
+	first := WorktreeID("app", "/repo/Plan 2")
+	second := WorktreeID("app", "/repo/Plan 2")
+	if first != second {
+		t.Fatal("WorktreeID is not deterministic")
+	}
+}
+
+func TestValidateTemplate(t *testing.T) {
+	for _, ok := range []string{"http://localhost:{{port}}", "db_{{worktree}}"} {
+		if err := validateTemplate("t", ok); err != nil {
+			t.Fatalf("%q rejected: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"{{port}}{{port}}", "{{worktree}}{{worktree}}",
+		"{{port}}{{worktree}}", "{{unknown}}"} {
+		if err := validateTemplate("t", bad); err == nil {
+			t.Fatalf("%q accepted", bad)
+		}
 	}
 }
 

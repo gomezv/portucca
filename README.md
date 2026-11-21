@@ -409,8 +409,8 @@ A complete `portucca.json`:
   or restart the stack. It must reference an `env` target of the same service without a
   template.
 - `env` writes the assigned port. Without `template`, it writes the number; with a template,
-  it replaces `{{port}}`. Portucca preserves other keys and comments and creates new files
-  with mode `0600`.
+  it replaces `{{port}}` or `{{worktree}}` (see below). Portucca preserves other keys and
+  comments and creates new files with mode `0600`.
 - `bootstrap.copyFromMain` copies a file from the main checkout only when the destination is
   missing. `bootstrap.symlinks` creates a symlink only when the path is missing; a regular
   file or a different symlink fails with `symlink_conflict`. `target` is relative to the
@@ -419,6 +419,30 @@ A complete `portucca.json`:
 - The file is strict JSON: unknown fields fail with `config_invalid`.
 
 Commit `portucca.json` once; worktrees created from that branch read the same file.
+
+### Per-worktree identifiers
+
+`env[].template` accepts exactly one of `{{port}}` or `{{worktree}}`; the two cannot be
+mixed. `{{worktree}}` expands to a stable identifier derived from the project slug and the
+worktree's canonical path, formatted as `<project>_<basename>_<hash8>`. For example:
+
+```json
+{ "service": "api", "file": ".env", "key": "WORKTREE_ID", "template": "{{worktree}}" }
+```
+
+The value uses lowercase letters, digits, and underscores, starts with a letter, and is at
+most 63 bytes. It is stable across `ensure`, `setup`, `reallocate`, and restarts; it changes
+only if the canonical path or the project slug changes. Every target of the same worktree
+receives the same value. In the main checkout, targets with `{{worktree}}` are omitted
+entirely: portucca does not write them, does not inject them in `run`, and does not include
+them in `env --json` or in the `ensure`/`setup` payload.
+
+The identifier is a name, not a provisioner. Portucca never creates, migrates, or drops a
+database or schema. A project can declare `DATABASE_NAME={{worktree}}` or
+`DATABASE_SCHEMA={{worktree}}`, create and migrate the resource from a project script (for
+example `portucca run -- <script>`), and verify at startup that the connection uses the
+expected `current_database()`/`current_schema()`. With Prisma 7, pass the schema explicitly;
+a separate database per worktree is more robust than a schema when extensions are involved.
 
 ### Shared local config
 

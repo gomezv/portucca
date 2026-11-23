@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `env[].template` accepts `{{worktree}}`, a stable per-worktree identifier
+  (`<project>_<basename>_<hash8>`) for database or schema names. `ensure` and `setup` write
+  it, `reallocate` preserves it, `env` and `run` expose it, and `doctor` detects drift. The
+  main checkout omits those targets entirely, and portucca still never creates or migrates
+  databases.
+
 ## [0.7.0] - 2026-11-19
 
 ### Added

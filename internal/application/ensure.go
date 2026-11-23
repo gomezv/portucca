@@ -116,7 +116,8 @@ func (a *App) ensureLocked(c project.Context, cfg domain.Config, cfgPath string)
 	if err != nil {
 		return EnsureResult{}, mapAllocErr(err)
 	}
-	values := desiredValues(cfg, res.Services)
+	id := worktreeID(c, cfg)
+	values := desiredValues(cfg, res.Services, id)
 	envChanged, err := a.EnvStore.WriteValues(c.Root, values)
 	if err != nil {
 		return EnsureResult{}, apperr.New("env_write", err.Error(), "check the env file permissions")

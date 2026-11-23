@@ -67,6 +67,50 @@ func TestEnvMainReturnsReservedPorts(t *testing.T) {
 	}
 }
 
+func TestEnvWorktreeID(t *testing.T) {
+	root := t.TempDir()
+	cfg := worktreeIDConfig()
+	reg := &fakeRegistry{reg: domain.Registry{
+		Version: 2,
+		Worktrees: []domain.Claim{{
+			Project: "app", Path: root,
+			Services: map[domain.ServiceName]domain.ServiceClaim{"web": {Port: 3001}},
+		}},
+		Mains: []domain.MainReservation{},
+	}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: "/repo"}}, cfg, reg, &fakeEnv{})
+	got, err := app.Env(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := domain.WorktreeID("app", root)
+	found := false
+	for _, value := range got.Env {
+		if value.Key == "DATABASE_NAME" && value.Value == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("env = %+v, want DATABASE_NAME=%s", got.Env, want)
+	}
+}
+
+func TestEnvMainSkipsWorktreeID(t *testing.T) {
+	root := t.TempDir()
+	cfg := worktreeIDConfig()
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root, IsMain: true}}, cfg, reg, &fakeEnv{})
+	got, err := app.Env(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range got.Env {
+		if value.Key == "DATABASE_NAME" {
+			t.Fatalf("main env includes DATABASE_NAME: %+v", got.Env)
+		}
+	}
+}
+
 func TestEnvWithoutClaimReturnsNoClaim(t *testing.T) {
 	root := t.TempDir()
 	cfg := domain.Config{

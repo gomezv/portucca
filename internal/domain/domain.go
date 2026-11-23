@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path"
 	"regexp"
@@ -221,11 +223,60 @@ func validateTemplate(field, t string) error {
 	if t == "" {
 		return nil
 	}
-	if strings.Count(t, "{{port}}") != 1 {
-		return fmt.Errorf("%s: exactly one {{port}} placeholder is required", field)
+	port := strings.Count(t, "{{port}}")
+	worktree := strings.Count(t, "{{worktree}}")
+	if port+worktree != 1 {
+		return fmt.Errorf("%s: exactly one of {{port}} or {{worktree}} is required", field)
 	}
-	if strings.Contains(strings.ReplaceAll(t, "{{port}}", ""), "{{") {
+	stripped := strings.ReplaceAll(t, "{{port}}", "")
+	stripped = strings.ReplaceAll(stripped, "{{worktree}}", "")
+	if strings.Contains(stripped, "{{") {
 		return fmt.Errorf("%s: unknown template placeholder", field)
 	}
 	return nil
+}
+
+// WorktreeID derives a stable identifier from the project slug and the canonical worktree
+// path. The visible part is lowercase [a-z0-9_] and starts with a letter; the suffix is the
+// first 8 hex characters of SHA-256 over the canonical path. The whole value is at most 63
+// bytes. The caller passes an already canonicalized root.
+func WorktreeID(project Project, realRoot string) string {
+	base := sanitizeID(path.Base(realRoot))
+	if base == "" {
+		base = "wt"
+	}
+	visible := sanitizeID(string(project) + "_" + base)
+	if visible == "" {
+		visible = "wt"
+	}
+	if visible[0] >= '0' && visible[0] <= '9' {
+		visible = "p_" + visible
+	}
+	if len(visible) > maxWorktreeIDVisible {
+		visible = strings.TrimRight(visible[:maxWorktreeIDVisible], "_")
+	}
+	sum := sha256.Sum256([]byte(realRoot))
+	return visible + "_" + hex.EncodeToString(sum[:])[:8]
+}
+
+const (
+	maxWorktreeIDLength  = 63
+	maxWorktreeIDVisible = maxWorktreeIDLength - 1 - 8
+)
+
+func sanitizeID(s string) string {
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastUnderscore = false
+			continue
+		}
+		if !lastUnderscore {
+			b.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	return strings.Trim(b.String(), "_")
 }

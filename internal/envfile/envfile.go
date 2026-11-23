@@ -178,11 +178,25 @@ func (d *Document) Bytes() []byte {
 	return []byte(strings.Join(raw, "\n") + "\n")
 }
 
-func RenderValue(port domain.Port, template string) string {
+type ValueContext struct {
+	Port       domain.Port
+	WorktreeID string
+}
+
+// RenderValue resolves a template with the given context. The second result reports whether
+// the target applies: a {{worktree}} target without a worktree ID (the main checkout) is
+// omitted by the caller.
+func RenderValue(ctx ValueContext, template string) (string, bool) {
 	if template == "" {
-		return strconv.Itoa(int(port))
+		return strconv.Itoa(int(ctx.Port)), true
 	}
-	return strings.ReplaceAll(template, "{{port}}", strconv.Itoa(int(port)))
+	if strings.Contains(template, "{{port}}") {
+		return strings.ReplaceAll(template, "{{port}}", strconv.Itoa(int(ctx.Port))), true
+	}
+	if ctx.WorktreeID == "" {
+		return "", false
+	}
+	return strings.ReplaceAll(template, "{{worktree}}", ctx.WorktreeID), true
 }
 
 func ReadValue(root string, ref domain.EnvRef) (string, bool, error) {

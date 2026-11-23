@@ -228,11 +228,21 @@ func TestEnsureSymlinkMissingParent(t *testing.T) {
 }
 
 func TestRenderValue(t *testing.T) {
-	if got := RenderValue(3005, ""); got != "3005" {
-		t.Fatalf("RenderValue plain = %q, want 3005", got)
+	if got, ok := RenderValue(ValueContext{Port: 3005}, ""); !ok || got != "3005" {
+		t.Fatalf("RenderValue plain = %q, %v; want 3005, true", got, ok)
 	}
-	if got := RenderValue(3005, "http://localhost:{{port}}"); got != "http://localhost:3005" {
-		t.Fatalf("RenderValue template = %q", got)
+	if got, ok := RenderValue(ValueContext{Port: 3005}, "http://localhost:{{port}}"); !ok || got != "http://localhost:3005" {
+		t.Fatalf("RenderValue template = %q, %v", got, ok)
+	}
+}
+
+func TestRenderValueWorktree(t *testing.T) {
+	got, ok := RenderValue(ValueContext{WorktreeID: "app_wt_abcd1234"}, "db_{{worktree}}")
+	if !ok || got != "db_app_wt_abcd1234" {
+		t.Fatalf("got %q, %v", got, ok)
+	}
+	if _, ok := RenderValue(ValueContext{}, "db_{{worktree}}"); ok {
+		t.Fatal("worktree target applied without an ID")
 	}
 }
 

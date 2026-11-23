@@ -248,9 +248,12 @@ func (a *App) Doctor(ctx context.Context, worktree string) (DoctorResult, error)
 		own := findClaim(reg, c.Root)
 		desired := map[string]map[string]string{}
 		if own != nil {
-			desired = desiredValues(cfg, own.Services)
+			desired = desiredValues(cfg, own.Services, worktreeID(c, cfg))
 		}
 		for _, target := range cfg.Env {
+			if c.IsMain && strings.Contains(target.Template, "{{worktree}}") {
+				continue
+			}
 			path := filepath.Join(c.Root, target.File)
 			info, statErr := os.Lstat(path)
 			if errors.Is(statErr, fs.ErrNotExist) {

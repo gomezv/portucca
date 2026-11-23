@@ -330,6 +330,84 @@ func TestEnsureIdempotent(t *testing.T) {
 	}
 }
 
+func worktreeIDConfig() domain.Config {
+	return domain.Config{
+		Version: 1,
+		Project: "app",
+		Services: map[domain.ServiceName]domain.Service{
+			"web": {MainPort: 3000, StartPort: 3001},
+		},
+		Env: []domain.EnvTarget{{Service: "web", File: ".env", Key: "DATABASE_NAME", Template: "{{worktree}}"}},
+	}
+}
+
+func TestEnsureWritesWorktreeID(t *testing.T) {
+	root := t.TempDir()
+	cfg := worktreeIDConfig()
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
+	env := &fakeEnv{}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: "/repo", IsMain: false}}, cfg, reg, env)
+	got, err := app.Ensure(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := domain.WorktreeID("app", root)
+	if env.files[".env"]["DATABASE_NAME"] != want {
+		t.Fatalf("env = %+v, want DATABASE_NAME=%s", env.files, want)
+	}
+	found := false
+	for _, value := range got.Env {
+		if value.Key == "DATABASE_NAME" && value.Value == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("payload env = %+v, want DATABASE_NAME=%s", got.Env, want)
+	}
+}
+
+func TestEnsureMainSkipsWorktreeID(t *testing.T) {
+	root := t.TempDir()
+	cfg := worktreeIDConfig()
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
+	env := &fakeEnv{}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: root, IsMain: true}}, cfg, reg, env)
+	got, err := app.Ensure(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(env.files) != 0 {
+		t.Fatalf("main wrote env: %+v", env.files)
+	}
+	for _, value := range got.Env {
+		if value.Key == "DATABASE_NAME" {
+			t.Fatalf("main payload includes DATABASE_NAME: %+v", got.Env)
+		}
+	}
+}
+
+func TestEnsureWorktreeIDIsIdempotent(t *testing.T) {
+	root := t.TempDir()
+	cfg := worktreeIDConfig()
+	reg := &fakeRegistry{reg: domain.Registry{Version: 2, Worktrees: []domain.Claim{}, Mains: []domain.MainReservation{}}}
+	env := &fakeEnv{}
+	app := testApp(fakeLocator{ctx: project.Context{Root: root, MainRoot: "/repo", IsMain: false}}, cfg, reg, env)
+	want := domain.WorktreeID("app", root)
+	if _, err := app.Ensure(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	got, err := app.Ensure(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Changed {
+		t.Fatalf("second ensure changed: %+v", got)
+	}
+	if env.files[".env"]["DATABASE_NAME"] != want {
+		t.Fatalf("second ensure wrote %+v, want DATABASE_NAME=%s", env.files, want)
+	}
+}
+
 func TestEnsureKeepsMainWithoutConfig(t *testing.T) {
 	main := t.TempDir()
 	other := t.TempDir()

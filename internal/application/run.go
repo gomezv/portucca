@@ -62,7 +62,7 @@ func (a *App) PrepareRun(ctx context.Context, req RunRequest) (RunPlan, error) {
 	if err != nil {
 		return RunPlan{}, err
 	}
-	values, err := runEnvValues(cfg, setup.Services, req.Service)
+	values, err := runEnvValues(cfg, setup.Services, req.Service, worktreeID(c, cfg))
 	if err != nil {
 		return RunPlan{}, err
 	}
@@ -80,7 +80,7 @@ func (a *App) Run(ctx context.Context, req RunRequest) error {
 	return a.Executor.Exec(plan.Path, plan.Args, plan.Env)
 }
 
-func runEnvValues(cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim, filter domain.ServiceName) ([]string, error) {
+func runEnvValues(cfg domain.Config, services map[domain.ServiceName]domain.ServiceClaim, filter domain.ServiceName, worktreeID string) ([]string, error) {
 	values := map[string]string{}
 	owners := map[string]map[domain.ServiceName]bool{}
 	for _, target := range cfg.Env {
@@ -91,7 +91,10 @@ func runEnvValues(cfg domain.Config, services map[domain.ServiceName]domain.Serv
 		if !ok {
 			continue
 		}
-		value := envfile.RenderValue(claim.Port, target.Template)
+		value, applies := envfile.RenderValue(envfile.ValueContext{Port: claim.Port, WorktreeID: worktreeID}, target.Template)
+		if !applies {
+			continue
+		}
 		if owners[target.Key] == nil {
 			owners[target.Key] = map[domain.ServiceName]bool{}
 		}

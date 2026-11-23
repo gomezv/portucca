@@ -51,7 +51,8 @@ func (a *App) Reallocate(ctx context.Context, worktree string) (EnsureResult, er
 	if err != nil {
 		return EnsureResult{}, mapAllocErr(err)
 	}
-	if _, err := a.EnvStore.WriteValues(c.Root, desiredValues(cfg, res.Services)); err != nil {
+	id := worktreeID(c, cfg)
+	if _, err := a.EnvStore.WriteValues(c.Root, desiredValues(cfg, res.Services, id)); err != nil {
 		return EnsureResult{}, apperr.New("env_write", err.Error(), "check the env file permissions")
 	}
 	reg = upsertClaim(reg, domain.Claim{Project: cfg.Project, Path: c.Root, Services: res.Services, UpdatedAt: a.now()})
@@ -60,6 +61,6 @@ func (a *App) Reallocate(ctx context.Context, worktree string) (EnsureResult, er
 	}
 	return EnsureResult{
 		Project: cfg.Project, WorktreePath: c.Root, Changed: true,
-		Services: res.Services, Env: desiredEnv(c.Root, cfg, res.Services),
+		Services: res.Services, Env: desiredEnv(c.Root, cfg, res.Services, id),
 	}, nil
 }
